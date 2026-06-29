@@ -1,0 +1,3383 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: K&S Solar Energy API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: bookings
+    description: Solar panel washing bookings
+  - name: complaints
+    description: Customer complaints
+  - name: settings
+    description: App settings
+  - name: chat
+    description: Support chat
+  - name: users
+    description: User management (admin)
+  - name: technicians
+    description: Technician management (admin)
+  - name: quotes
+    description: Solar installation quotation requests
+  - name: warranties
+    description: Customer warranty tracking
+  - name: referral
+    description: Referral system
+  - name: sites
+    description: Working sites management (admin)
+  - name: Storage
+    description: Object storage upload and serving endpoints.
+  - name: attendance
+    description: Technician GPS check-in/check-out attendance
+  - name: reports
+    description: Technician performance reports and Excel download
+  - name: siteVisits
+    description: One-time site visit requests assigned to technicians
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register a new user (creates pending account)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "201":
+          description: Account request submitted, pending admin approval
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterPendingResponse"
+        "400":
+          description: Validation error or user already exists
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current user profile
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+    patch:
+      operationId: updateMe
+      tags: [auth]
+      summary: Update own profile (name, phone)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProfileRequest"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "401":
+          description: Unauthorized
+
+  /auth/me/password:
+    patch:
+      operationId: changeMyPassword
+      tags: [auth]
+      summary: Change own password
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+      responses:
+        "200":
+          description: Password changed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "400":
+          description: Current password incorrect
+        "401":
+          description: Unauthorized
+
+  /bookings:
+    get:
+      operationId: getBookings
+      tags: [bookings]
+      summary: Get bookings (own bookings or all if admin)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of bookings
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Booking"
+    post:
+      operationId: createBooking
+      tags: [bookings]
+      summary: Create a washing booking (requires login)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingRequest"
+      responses:
+        "201":
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Invalid request
+        "401":
+          description: Unauthorized
+
+  /bookings/{id}:
+    get:
+      operationId: getBookingById
+      tags: [bookings]
+      summary: Get booking by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Booking details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "404":
+          description: Booking not found
+
+  /bookings/{id}/status:
+    patch:
+      operationId: updateBookingStatus
+      tags: [bookings]
+      summary: Update booking status (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStatusRequest"
+      responses:
+        "200":
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
+  /bookings/stats/summary:
+    get:
+      operationId: getBookingStats
+      tags: [bookings]
+      summary: Get booking statistics
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Booking statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BookingStats"
+
+  /bookings/guest:
+    post:
+      operationId: createGuestBooking
+      tags: [bookings]
+      summary: Create a washing booking without an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBookingRequest"
+      responses:
+        "201":
+          description: Booking created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "400":
+          description: Invalid request
+
+  /complaints:
+    get:
+      operationId: getComplaints
+      tags: [complaints]
+      summary: Get complaints (own or all for admin)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of complaints
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Complaint"
+    post:
+      operationId: createComplaint
+      tags: [complaints]
+      summary: Submit a complaint
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateComplaintRequest"
+      responses:
+        "201":
+          description: Complaint submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Complaint"
+        "401":
+          description: Unauthorized
+
+  /complaints/guest:
+    post:
+      operationId: createGuestComplaint
+      tags: [complaints]
+      summary: Submit a complaint without an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateComplaintRequest"
+      responses:
+        "201":
+          description: Complaint submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Complaint"
+        "400":
+          description: Bad request
+
+  /complaints/{id}:
+    get:
+      operationId: getComplaintById
+      tags: [complaints]
+      summary: Get complaint by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Complaint details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Complaint"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+    patch:
+      operationId: updateComplaint
+      tags: [complaints]
+      summary: Update complaint status and/or technician info (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateComplaintRequest"
+      responses:
+        "200":
+          description: Complaint updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Complaint"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
+  /complaints/{id}/status:
+    patch:
+      operationId: updateComplaintStatus
+      tags: [complaints]
+      summary: Update complaint status (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStatusRequest"
+      responses:
+        "200":
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Complaint"
+        "403":
+          description: Forbidden
+
+  /settings:
+    get:
+      operationId: getSettings
+      tags: [settings]
+      summary: Get all app settings
+      responses:
+        "200":
+          description: Settings list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Setting"
+
+  /settings/{key}:
+    patch:
+      operationId: updateSetting
+      tags: [settings]
+      summary: Update a setting value (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: key
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSettingRequest"
+      responses:
+        "200":
+          description: Setting updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Setting"
+        "403":
+          description: Forbidden
+
+  /admin/users:
+    get:
+      operationId: getAdminUsers
+      tags: [users]
+      summary: Get all non-admin users (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminUser"
+        "403":
+          description: Forbidden
+
+  /admin/users/{id}/password:
+    patch:
+      operationId: adminResetUserPassword
+      tags: [users]
+      summary: Reset a user's password (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdminResetPasswordRequest"
+      responses:
+        "200":
+          description: Password reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: Forbidden
+        "404":
+          description: User not found
+
+  /admin/users/{id}:
+    delete:
+      operationId: deleteAdminUser
+      tags: [users]
+      summary: Delete a user account (admin only, cannot delete admin accounts)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: User deleted successfully
+        "400":
+          description: Cannot delete admin accounts
+        "403":
+          description: Forbidden
+        "404":
+          description: User not found
+
+  /admin/users/{id}/report:
+    get:
+      operationId: getCustomerReport
+      tags: [users]
+      summary: Get full activity report for a customer (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Customer activity report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerReport"
+        "403":
+          description: Forbidden
+        "404":
+          description: User not found
+
+  /admin/users/{id}/report/pdf:
+    get:
+      operationId: downloadCustomerReportPdf
+      tags: [users]
+      summary: Download customer report as PDF (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: PDF file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "403":
+          description: Forbidden
+        "404":
+          description: User not found
+
+  /admin/users/{id}/status:
+    patch:
+      operationId: updateAdminUserStatus
+      tags: [users]
+      summary: Update a user's account status (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateStatusRequest"
+      responses:
+        "200":
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUser"
+        "400":
+          description: Invalid status
+        "403":
+          description: Forbidden
+        "404":
+          description: User not found
+
+  /technicians:
+    get:
+      operationId: getTechnicians
+      tags: [technicians]
+      summary: Get all technicians (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of technicians
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Technician"
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden — admin only
+    post:
+      operationId: createTechnician
+      tags: [technicians]
+      summary: Create a new technician account (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTechnicianRequest"
+      responses:
+        "201":
+          description: Technician created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Technician"
+        "400":
+          description: Validation error or email already exists
+        "403":
+          description: Forbidden
+
+  /technicians/{id}:
+    patch:
+      operationId: updateTechnician
+      tags: [technicians]
+      summary: Update technician info or deactivate (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateTechnicianRequest"
+      responses:
+        "200":
+          description: Technician updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Technician"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
+  /bookings/{id}/technicians:
+    put:
+      operationId: assignBookingTechnicians
+      tags: [bookings]
+      summary: Assign multiple technicians to a booking (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignTechniciansRequest"
+      responses:
+        "200":
+          description: Technicians assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Booking"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
+  /complaints/{id}/technicians:
+    put:
+      operationId: assignComplaintTechnicians
+      tags: [complaints]
+      summary: Assign multiple technicians to a complaint (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignTechniciansRequest"
+      responses:
+        "200":
+          description: Technicians assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Complaint"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
+  /site-visits/{id}/technicians:
+    put:
+      operationId: assignSiteVisitTechnicians
+      tags: [site-visits]
+      summary: Assign multiple technicians to a site visit (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignTechniciansRequest"
+      responses:
+        "200":
+          description: Technicians assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SiteVisit"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
+  /chat/messages:
+    get:
+      operationId: getChatMessages
+      tags: [chat]
+      summary: Get current user's chat messages
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Messages list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatMessage"
+    post:
+      operationId: sendChatMessage
+      tags: [chat]
+      summary: Send a support message
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageRequest"
+      responses:
+        "201":
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatMessage"
+
+  /chat/admin/conversations:
+    get:
+      operationId: getAdminConversations
+      tags: [chat]
+      summary: Get all customer conversations (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Conversations list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatConversation"
+
+  /chat/admin/{userId}/messages:
+    get:
+      operationId: getAdminUserMessages
+      tags: [chat]
+      summary: Get messages for a specific user (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Messages list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ChatMessage"
+
+  /quotes:
+    get:
+      operationId: getQuotes
+      tags: [quotes]
+      summary: Get quotes (own or all for admin)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of quotes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Quote"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: createQuote
+      tags: [quotes]
+      summary: Submit a solar installation quotation request
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuoteRequest"
+      responses:
+        "201":
+          description: Quote request submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "400":
+          description: Validation error
+        "401":
+          description: Unauthorized
+
+  /quotes/{id}:
+    get:
+      operationId: getQuoteById
+      tags: [quotes]
+      summary: Get a quote by ID
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Quote details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+    patch:
+      operationId: updateQuote
+      tags: [quotes]
+      summary: Respond to a quote (admin) or accept/reject (customer)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateQuoteRequest"
+      responses:
+        "200":
+          description: Quote updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "400":
+          description: Invalid request
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
+  /quotes/guest:
+    post:
+      operationId: createGuestQuote
+      tags: [quotes]
+      summary: Submit a solar installation quote request without an account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateQuoteRequest"
+      responses:
+        "201":
+          description: Quote request submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "400":
+          description: Invalid request
+
+  /warranties/search:
+    get:
+      operationId: searchWarrantyByInvoice
+      tags: [warranties]
+      summary: Search warranty by invoice number (public, no auth required)
+      parameters:
+        - name: invoiceNumber
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Warranty found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Warranty"
+        "404":
+          description: Not found
+
+  /warranties:
+    get:
+      operationId: getWarranties
+      tags: [warranties]
+      summary: Get warranties (own or filtered by userId for admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of warranties
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Warranty"
+        "401":
+          description: Unauthorized
+    post:
+      operationId: createWarranty
+      tags: [warranties]
+      summary: Add a warranty record for a customer (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWarrantyRequest"
+      responses:
+        "201":
+          description: Warranty created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Warranty"
+        "400":
+          description: Validation error
+        "403":
+          description: Forbidden
+
+  /warranties/{id}:
+    patch:
+      operationId: updateWarranty
+      tags: [warranties]
+      summary: Update a warranty record (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWarrantyRequest"
+      responses:
+        "200":
+          description: Warranty updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Warranty"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteWarranty
+      tags: [warranties]
+      summary: Delete a warranty record (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Warranty deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SuccessResponse"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
+  /chat/admin/{userId}/reply:
+    post:
+      operationId: sendAdminReply
+      tags: [chat]
+      summary: Send admin reply to a user
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendMessageRequest"
+      responses:
+        "201":
+          description: Reply sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatMessage"
+
+  /referral/my-stats:
+    get:
+      operationId: getReferralStats
+      tags: [referral]
+      summary: Get my referral code, points, and balance
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Referral stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReferralStats"
+
+  /admin/referrals:
+    get:
+      operationId: getAdminReferrals
+      tags: [referral]
+      summary: List all referrals (admin only)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of referrals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminReferral"
+
+  /referral/redeem:
+    post:
+      operationId: redeemReferralPoints
+      tags: [referral]
+      summary: Request a payment for referral points
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Payment request created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentRequest"
+        "400":
+          description: Bad request (no points, no bank account, etc.)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                required: [error]
+
+  /referral/payments:
+    get:
+      operationId: getMyPayments
+      tags: [referral]
+      summary: Get my payment request history
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of my payment requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PaymentRequest"
+
+  /admin/payment-requests:
+    get:
+      operationId: getAdminPaymentRequests
+      tags: [referral]
+      summary: List all payment requests (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: status
+          schema:
+            type: string
+          required: false
+      responses:
+        "200":
+          description: List of payment requests with user info
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminPaymentRequest"
+
+  /admin/payment-requests/{id}:
+    patch:
+      operationId: updatePaymentRequest
+      tags: [referral]
+      summary: Mark payment as paid or rejected (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentStatusUpdate"
+      responses:
+        "200":
+          description: Updated payment request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminPaymentRequest"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                required: [error]
+
+  /sites:
+    get:
+      operationId: getSites
+      tags: [sites]
+      summary: List sites (admin=all, technician=assigned only)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Sites list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Site"
+    post:
+      operationId: createSite
+      tags: [sites]
+      summary: Create a new working site (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSiteRequest"
+      responses:
+        "201":
+          description: Site created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Site"
+        "403":
+          description: Forbidden
+
+  /sites/{id}:
+    patch:
+      operationId: updateSite
+      tags: [sites]
+      summary: Update site status or details (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSiteRequest"
+      responses:
+        "200":
+          description: Site updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Site"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteSite
+      tags: [sites]
+      summary: Delete a site (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Deleted
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
+  /sites/{id}/technicians:
+    put:
+      operationId: assignSiteTechnicians
+      tags: [sites]
+      summary: Assign technicians to a site (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignSiteTechniciansRequest"
+      responses:
+        "200":
+          description: Technicians assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Site"
+        "403":
+          description: Forbidden
+        "404":
+          description: Not found
+
+
+  /storage/uploads/request-url:
+    post:
+      tags: [Storage]
+      operationId: requestUploadUrl
+      summary: Request a presigned URL for file upload
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UploadUrlRequest'
+      responses:
+        '200':
+          description: Presigned upload URL generated.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UploadUrlResponse'
+
+  /storage/objects/{objectPath}:
+    get:
+      tags: [Storage]
+      operationId: getStorageObject
+      summary: Serve an object entity
+      parameters:
+        - name: objectPath
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Object content streamed.
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+
+  /attendance/checkin:
+    post:
+      tags: [attendance]
+      operationId: checkIn
+      summary: Technician check-in with GPS and photos
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckInRequest'
+      responses:
+        '200':
+          description: Checked in successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceRecord'
+
+  /attendance/{id}/checkout:
+    post:
+      tags: [attendance]
+      operationId: checkOut
+      summary: Technician check-out
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Checked out successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceRecord'
+
+  /attendance:
+    get:
+      tags: [attendance]
+      operationId: getAttendance
+      summary: Get all attendance records (admin)
+      parameters:
+        - name: date
+          in: query
+          schema:
+            type: string
+        - name: technicianId
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of attendance records.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AttendanceRecord'
+
+  /attendance/my:
+    get:
+      tags: [attendance]
+      operationId: getMyAttendance
+      summary: Get current technician attendance history
+      responses:
+        '200':
+          description: Technician attendance records.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AttendanceRecord'
+
+  /attendance/today:
+    get:
+      tags: [attendance]
+      operationId: getTodayAttendance
+      summary: Get today check-in for current technician
+      responses:
+        '200':
+          description: Today attendance or null.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceTodayResponse'
+
+  /attendance/location-ping:
+    post:
+      tags: [attendance]
+      operationId: sendLocationPing
+      summary: Send GPS location ping while checked in (technician)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LocationPingRequest'
+      responses:
+        '201':
+          description: Ping saved.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationPing'
+
+  /attendance/absent-today:
+    get:
+      tags: [attendance]
+      operationId: getAbsentToday
+      summary: Get technicians who have not checked in today (admin)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of absent technicians today.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AbsentTechnician'
+
+  /technician-locations:
+    post:
+      tags: [attendance]
+      operationId: upsertTechnicianLocation
+      summary: Upsert technician's latest location (technician only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpsertTechnicianLocationInput'
+      responses:
+        '200':
+          description: Location upserted successfully.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+        '400':
+          description: Bad Request
+        '403':
+          description: Forbidden
+    get:
+      tags: [attendance]
+      operationId: getTechnicianLiveLocations
+      summary: Get latest live location for all currently checked-in technicians (admin)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Latest location ping per checked-in technician.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TechnicianLiveLocation'
+        '403':
+          description: Forbidden
+
+  /technician-locations/{technicianId}/trail:
+    get:
+      tags: [attendance]
+      operationId: getTechnicianTrail
+      summary: Get rolling last-24h GPS trail for a technician across sessions (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: technicianId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ordered list of GPS pings for the technician in the last 24 hours.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LocationPing'
+        '403':
+          description: Forbidden
+
+  /maps/token:
+    get:
+      tags: [maps]
+      operationId: getMapsToken
+      summary: Get the Mapbox access token for the live map (admin)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: The Mapbox access token, sourced from the server-side environment.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token]
+                properties:
+                  token:
+                    type: string
+        '403':
+          description: Forbidden
+
+  /attendance/{id}/location-trail:
+    get:
+      tags: [attendance]
+      operationId: getLocationTrail
+      summary: Get GPS location trail for an attendance session (admin)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ordered list of GPS pings for this attendance session.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LocationPing'
+
+  /attendance/{id}:
+    patch:
+      tags: [attendance]
+      operationId: adminUpdateAttendance
+      summary: Admin edit or correct a technician's check-in or check-out time
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateAttendanceRequest'
+      responses:
+        '200':
+          description: Updated attendance record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceRecord'
+        '404':
+          description: Record not found.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+  /attendance/manual:
+    post:
+      tags: [attendance]
+      operationId: adminAddManualAttendance
+      summary: Admin manually add an attendance entry for any technician
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManualAttendanceRequest'
+      responses:
+        '201':
+          description: Manually created attendance record.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttendanceRecord'
+
+  /reports/technician:
+    get:
+      tags: [reports]
+      operationId: getTechnicianReport
+      summary: Get technician performance stats
+      parameters:
+        - name: technicianId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Technician report stats.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TechnicianReport'
+
+  /reports/technician/download-pdf:
+    get:
+      operationId: downloadTechnicianReportPdf
+      tags: [reports]
+      summary: Download technician attendance report as PDF (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: technicianId
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+        - name: to
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: PDF report file
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: technicianId is required
+        "403":
+          description: Forbidden
+        "404":
+          description: Technician not found
+
+  /site-visits:
+    get:
+      operationId: getSiteVisits
+      tags: [siteVisits]
+      summary: List site visits (admin all, technician assigned)
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of site visits
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SiteVisit'
+    post:
+      operationId: createSiteVisit
+      tags: [siteVisits]
+      summary: Create a site visit (admin only)
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateSiteVisitRequest'
+      responses:
+        '201':
+          description: Created site visit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteVisit'
+
+  /site-visits/{id}:
+    patch:
+      operationId: updateSiteVisit
+      tags: [siteVisits]
+      summary: Update a site visit (admin full, technician status+notes only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSiteVisitRequest'
+      responses:
+        '200':
+          description: Updated site visit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteVisit'
+    delete:
+      operationId: deleteSiteVisit
+      tags: [siteVisits]
+      summary: Delete a site visit (admin only)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Deleted
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    RegisterRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        password:
+          type: string
+          minLength: 6
+        referralCode:
+          type: string
+          description: Optional referral code from an existing user
+      required:
+        - name
+        - email
+        - phone
+        - password
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserProfile"
+      required:
+        - token
+        - user
+
+    RegisterPendingResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        pending:
+          type: boolean
+      required:
+        - message
+        - pending
+
+    UserProfile:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        isAdmin:
+          type: boolean
+        isMaster:
+          type: boolean
+        inverterBrand:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        status:
+          type: string
+        role:
+          type: string
+          enum: [customer, technician]
+        specialty:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - phone
+        - isAdmin
+        - isMaster
+        - status
+        - role
+        - createdAt
+
+    CustomerReport:
+      type: object
+      properties:
+        user:
+          type: object
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+            phone:
+              type: string
+            city:
+              type: string
+              nullable: true
+            status:
+              type: string
+            role:
+              type: string
+            inverterBrand:
+              type: string
+              nullable: true
+            referralCode:
+              type: string
+              nullable: true
+            referralPoints:
+              type: integer
+            createdAt:
+              type: string
+              format: date-time
+          required: [id, name, email, phone, status, role, referralPoints, createdAt]
+        bookings:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              customerName:
+                type: string
+              status:
+                type: string
+              preferredDate:
+                type: string
+              city:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+            required: [id, customerName, status, preferredDate, city, createdAt]
+        complaints:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              subject:
+                type: string
+              status:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+            required: [id, subject, status, createdAt]
+        warranties:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              warrantyType:
+                type: string
+              brand:
+                type: string
+              model:
+                type: string
+                nullable: true
+              purchaseDate:
+                type: string
+              durationMonths:
+                type: integer
+              expiryDate:
+                type: string
+              warrantyStatus:
+                type: string
+            required: [id, warrantyType, brand, purchaseDate, durationMonths, expiryDate, warrantyStatus]
+        quotes:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              systemType:
+                type: string
+              status:
+                type: string
+              createdAt:
+                type: string
+                format: date-time
+            required: [id, systemType, status, createdAt]
+        referralCount:
+          type: integer
+      required: [user, bookings, complaints, warranties, quotes, referralCount]
+
+    AdminUser:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        isAdmin:
+          type: boolean
+        isMaster:
+          type: boolean
+        inverterBrand:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        role:
+          type: string
+        specialty:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - phone
+        - isAdmin
+        - isMaster
+        - status
+        - role
+        - createdAt
+
+    SuccessResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    UpdateProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        city:
+          type: string
+          nullable: true
+      required:
+        - name
+        - phone
+
+    ChangePasswordRequest:
+      type: object
+      properties:
+        currentPassword:
+          type: string
+        newPassword:
+          type: string
+          minLength: 6
+      required:
+        - currentPassword
+        - newPassword
+
+    AdminResetPasswordRequest:
+      type: object
+      properties:
+        newPassword:
+          type: string
+          minLength: 6
+      required:
+        - newPassword
+
+    UpdateStatusRequest:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    CreateBookingRequest:
+      type: object
+      properties:
+        customerName:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        panelCount:
+          type: integer
+          minimum: 1
+        panelType:
+          type: string
+          enum: [residential, commercial]
+        preferredDate:
+          type: string
+        preferredTime:
+          type: string
+          enum: [morning, afternoon, evening]
+        notes:
+          type: string
+      required:
+        - customerName
+        - phone
+        - address
+        - city
+        - panelCount
+        - panelType
+        - preferredDate
+        - preferredTime
+
+    Booking:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        customerName:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        panelCount:
+          type: integer
+        panelType:
+          type: string
+          enum: [residential, commercial]
+        preferredDate:
+          type: string
+        preferredTime:
+          type: string
+          enum: [morning, afternoon, evening]
+        notes:
+          type: string
+        status:
+          type: string
+          enum: [pending, confirmed, in_progress, completed, cancelled]
+        technicianId:
+          type: string
+          nullable: true
+        technicianIds:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - customerName
+        - phone
+        - address
+        - city
+        - panelCount
+        - panelType
+        - preferredDate
+        - preferredTime
+        - status
+        - technicianIds
+        - createdAt
+
+    BookingStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        pending:
+          type: integer
+        confirmed:
+          type: integer
+        completed:
+          type: integer
+        thisMonth:
+          type: integer
+      required:
+        - total
+        - pending
+        - confirmed
+        - completed
+        - thisMonth
+
+    CreateComplaintRequest:
+      type: object
+      properties:
+        subject:
+          type: string
+          enum: [Hybrid System, OnGrid System, Off-Grid System, Tubewell System]
+        customerName:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        message:
+          type: string
+        bookingId:
+          type: string
+      required:
+        - subject
+        - customerName
+        - phone
+        - address
+        - message
+
+    Setting:
+      type: object
+      properties:
+        key:
+          type: string
+        value:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - key
+        - value
+        - updatedAt
+
+    UpdateSettingRequest:
+      type: object
+      properties:
+        value:
+          type: string
+      required:
+        - value
+
+    ChatMessage:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        isAdminSender:
+          type: boolean
+        message:
+          type: string
+        isRead:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - isAdminSender
+        - message
+        - isRead
+        - createdAt
+
+    ChatConversation:
+      type: object
+      properties:
+        userId:
+          type: string
+        userName:
+          type: string
+        userPhone:
+          type: string
+        lastMessage:
+          type: string
+        lastAt:
+          type: string
+        unreadCount:
+          type: integer
+      required:
+        - userId
+        - lastMessage
+        - lastAt
+        - unreadCount
+
+    SendMessageRequest:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    Technician:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        specialty:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - email
+        - phone
+        - status
+        - createdAt
+
+    CreateTechnicianRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+        password:
+          type: string
+          minLength: 6
+        specialty:
+          type: string
+      required:
+        - name
+        - email
+        - phone
+        - password
+
+    UpdateTechnicianRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+        phone:
+          type: string
+        specialty:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, inactive]
+
+    AssignTechnicianRequest:
+      type: object
+      properties:
+        technicianId:
+          type: string
+          nullable: true
+      required:
+        - technicianId
+
+    AssignTechniciansRequest:
+      type: object
+      properties:
+        technicianIds:
+          type: array
+          items:
+            type: string
+      required:
+        - technicianIds
+
+    Site:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        clientName:
+          type: string
+        clientPhone:
+          type: string
+        notes:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, in_progress, completed, closed, cancelled]
+        technicianIds:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - address
+        - city
+        - clientName
+        - clientPhone
+        - status
+        - technicianIds
+        - createdAt
+
+    CreateSiteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        clientName:
+          type: string
+        clientPhone:
+          type: string
+        notes:
+          type: string
+        technicianIds:
+          type: array
+          items:
+            type: string
+      required:
+        - name
+        - address
+        - city
+        - clientName
+        - clientPhone
+
+    UpdateSiteRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        clientName:
+          type: string
+        clientPhone:
+          type: string
+        notes:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [active, in_progress, completed, closed, cancelled]
+
+    AssignSiteTechniciansRequest:
+      type: object
+      properties:
+        technicianIds:
+          type: array
+          items:
+            type: string
+      required:
+        - technicianIds
+
+    UpdateComplaintRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [submitted, in_progress, resolved, closed]
+        technicianName:
+          type: string
+          nullable: true
+        technicianPhone:
+          type: string
+          nullable: true
+        technicianId:
+          type: string
+          nullable: true
+
+    Complaint:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        bookingId:
+          type: string
+        subject:
+          type: string
+        customerName:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        message:
+          type: string
+        status:
+          type: string
+        technicianName:
+          type: string
+          nullable: true
+        technicianPhone:
+          type: string
+          nullable: true
+        technicianId:
+          type: string
+          nullable: true
+        technicianIds:
+          type: array
+          items:
+            type: string
+        statusHistory:
+          type: array
+          nullable: true
+          items:
+            type: object
+            properties:
+              status:
+                type: string
+              changedAt:
+                type: string
+            required:
+              - status
+              - changedAt
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - subject
+        - customerName
+        - phone
+        - address
+        - message
+        - status
+        - technicianIds
+        - createdAt
+
+    Quote:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+          nullable: true
+        customerName:
+          type: string
+        phone:
+          type: string
+        city:
+          type: string
+        address:
+          type: string
+        propertyType:
+          type: string
+          enum: [house, commercial]
+        monthlyBill:
+          type: string
+        roofArea:
+          type: string
+          nullable: true
+        systemType:
+          type: string
+          enum: [on-grid, hybrid, off-grid, day-time, agri, commercial-system]
+        notes:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [submitted, under_review, quote_sent, accepted, rejected]
+        systemSize:
+          type: string
+          nullable: true
+        priceEstimate:
+          type: string
+          nullable: true
+        adminNote:
+          type: string
+          nullable: true
+        respondedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - customerName
+        - phone
+        - city
+        - address
+        - propertyType
+        - monthlyBill
+        - systemType
+        - status
+        - createdAt
+
+    CreateQuoteRequest:
+      type: object
+      properties:
+        customerName:
+          type: string
+        phone:
+          type: string
+        city:
+          type: string
+        address:
+          type: string
+        propertyType:
+          type: string
+          enum: [house, commercial]
+        monthlyBill:
+          type: string
+        roofArea:
+          type: string
+        systemType:
+          type: string
+          enum: [on-grid, hybrid, off-grid, day-time, agri, commercial-system]
+        notes:
+          type: string
+      required:
+        - customerName
+        - phone
+        - city
+        - address
+        - propertyType
+        - monthlyBill
+        - systemType
+
+    UpdateQuoteRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [submitted, under_review, quote_sent, accepted, rejected]
+        systemSize:
+          type: string
+          nullable: true
+        priceEstimate:
+          type: string
+          nullable: true
+        adminNote:
+          type: string
+          nullable: true
+
+    Warranty:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        invoiceNumber:
+          type: string
+          nullable: true
+        warrantyType:
+          type: string
+          enum: [inverter, panels, battery, installation]
+        brand:
+          type: string
+        model:
+          type: string
+          nullable: true
+        purchaseDate:
+          type: string
+        durationMonths:
+          type: integer
+        notes:
+          type: string
+          nullable: true
+        expiryDate:
+          type: string
+        warrantyStatus:
+          type: string
+          enum: [active, expiring_soon, expired]
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - userId
+        - warrantyType
+        - brand
+        - purchaseDate
+        - durationMonths
+        - expiryDate
+        - warrantyStatus
+        - createdAt
+
+    CreateWarrantyRequest:
+      type: object
+      properties:
+        userId:
+          type: string
+        invoiceNumber:
+          type: string
+        warrantyType:
+          type: string
+          enum: [inverter, panels, battery, installation]
+        brand:
+          type: string
+        model:
+          type: string
+        purchaseDate:
+          type: string
+        durationMonths:
+          type: integer
+          minimum: 1
+        notes:
+          type: string
+      required:
+        - userId
+        - warrantyType
+        - brand
+        - purchaseDate
+        - durationMonths
+
+    UpdateWarrantyRequest:
+      type: object
+      properties:
+        invoiceNumber:
+          type: string
+          nullable: true
+        warrantyType:
+          type: string
+          enum: [inverter, panels, battery, installation]
+        brand:
+          type: string
+        model:
+          type: string
+          nullable: true
+        purchaseDate:
+          type: string
+        durationMonths:
+          type: integer
+          minimum: 1
+        notes:
+          type: string
+          nullable: true
+
+    ReferralStats:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        code:
+          type: string
+          nullable: true
+        points:
+          type: integer
+        balance:
+          type: integer
+        referralCount:
+          type: integer
+      required:
+        - enabled
+        - code
+        - points
+        - balance
+        - referralCount
+
+    AdminReferral:
+      type: object
+      properties:
+        id:
+          type: string
+        pointsAwarded:
+          type: integer
+        createdAt:
+          type: string
+        referrerId:
+          type: string
+        referredId:
+          type: string
+        referrerName:
+          type: string
+        referrerEmail:
+          type: string
+        referredName:
+          type: string
+        referredEmail:
+          type: string
+      required:
+        - id
+        - pointsAwarded
+        - createdAt
+        - referrerId
+        - referredId
+        - referrerName
+        - referrerEmail
+        - referredName
+        - referredEmail
+
+    PaymentRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        pointsUsed:
+          type: integer
+        amountPkr:
+          type: integer
+        bankName:
+          type: string
+        bankAccountNumber:
+          type: string
+        bankAccountTitle:
+          type: string
+        status:
+          type: string
+        adminNote:
+          type: string
+          nullable: true
+        paidAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - userId
+        - pointsUsed
+        - amountPkr
+        - bankName
+        - bankAccountNumber
+        - bankAccountTitle
+        - status
+        - createdAt
+
+    AdminPaymentRequest:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        userName:
+          type: string
+        userEmail:
+          type: string
+        userPhone:
+          type: string
+        pointsUsed:
+          type: integer
+        amountPkr:
+          type: integer
+        bankName:
+          type: string
+        bankAccountNumber:
+          type: string
+        bankAccountTitle:
+          type: string
+        status:
+          type: string
+        adminNote:
+          type: string
+          nullable: true
+        paidAt:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+      required:
+        - id
+        - userId
+        - userName
+        - userEmail
+        - userPhone
+        - pointsUsed
+        - amountPkr
+        - bankName
+        - bankAccountNumber
+        - bankAccountTitle
+        - status
+        - createdAt
+
+    PaymentStatusUpdate:
+      type: object
+      properties:
+        status:
+          type: string
+        adminNote:
+          type: string
+      required:
+        - status
+
+
+    UploadUrlRequest:
+      type: object
+      required: [name, size, contentType]
+      properties:
+        name:
+          type: string
+        size:
+          type: integer
+        contentType:
+          type: string
+
+    UploadUrlResponse:
+      type: object
+      required: [uploadURL, objectPath]
+      properties:
+        uploadURL:
+          type: string
+        objectPath:
+          type: string
+
+    CheckInRequest:
+      type: object
+      properties:
+        selfieUrl:
+          type: string
+          nullable: true
+        sitePhotoUrl:
+          type: string
+          nullable: true
+        latitude:
+          type: string
+          nullable: true
+        longitude:
+          type: string
+          nullable: true
+        locationAddress:
+          type: string
+          nullable: true
+        siteId:
+          type: string
+          nullable: true
+        notes:
+          type: string
+          nullable: true
+
+    AttendanceRecord:
+      type: object
+      required: [id, technicianId, technicianName, checkInAt, createdAt]
+      properties:
+        id:
+          type: string
+        technicianId:
+          type: string
+        technicianName:
+          type: string
+        siteId:
+          type: string
+          nullable: true
+        siteName:
+          type: string
+          nullable: true
+        selfieUrl:
+          type: string
+          nullable: true
+        sitePhotoUrl:
+          type: string
+          nullable: true
+        latitude:
+          type: string
+          nullable: true
+        longitude:
+          type: string
+          nullable: true
+        locationAddress:
+          type: string
+          nullable: true
+        checkInAt:
+          type: string
+        checkOutAt:
+          type: string
+          nullable: true
+        totalHours:
+          type: number
+          nullable: true
+        overtimeHours:
+          type: number
+          nullable: true
+        isLate:
+          type: boolean
+        notes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+
+    AdminUpdateAttendanceRequest:
+      type: object
+      properties:
+        checkInAt:
+          type: string
+          description: ISO datetime string for the corrected check-in time
+        checkOutAt:
+          type: string
+          nullable: true
+          description: ISO datetime string for the corrected check-out time, or null to clear it
+        notes:
+          type: string
+          nullable: true
+
+    ManualAttendanceRequest:
+      type: object
+      required: [technicianId, checkInAt]
+      properties:
+        technicianId:
+          type: string
+        checkInAt:
+          type: string
+          description: ISO datetime string for the check-in time
+        checkOutAt:
+          type: string
+          nullable: true
+          description: ISO datetime string for the check-out time
+        notes:
+          type: string
+          nullable: true
+
+    AttendanceTodayResponse:
+      type: object
+      properties:
+        record:
+          $ref: '#/components/schemas/AttendanceRecord'
+          nullable: true
+
+    AbsentTechnician:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        phone:
+          type: string
+          nullable: true
+
+    LocationPingRequest:
+      type: object
+      required: [attendanceId, latitude, longitude]
+      properties:
+        attendanceId:
+          type: string
+        latitude:
+          type: string
+        longitude:
+          type: string
+        address:
+          type: string
+          nullable: true
+
+    LocationPing:
+      type: object
+      required: [id, attendanceId, technicianId, latitude, longitude, recordedAt]
+      properties:
+        id:
+          type: string
+        attendanceId:
+          type: string
+        technicianId:
+          type: string
+        latitude:
+          type: string
+        longitude:
+          type: string
+        address:
+          type: string
+          nullable: true
+        recordedAt:
+          type: string
+
+    UpsertTechnicianLocationInput:
+      type: object
+      required: [latitude, longitude]
+      properties:
+        latitude:
+          type: string
+        longitude:
+          type: string
+        address:
+          type: string
+          nullable: true
+
+    TechnicianLiveLocation:
+      type: object
+      required: [technicianId, name, latitude, longitude, recordedAt, status, isStale]
+      properties:
+        technicianId:
+          type: string
+        name:
+          type: string
+        latitude:
+          type: string
+        longitude:
+          type: string
+        address:
+          type: string
+          nullable: true
+        recordedAt:
+          type: string
+        attendanceId:
+          type: string
+          nullable: true
+        checkInAt:
+          type: string
+          nullable: true
+        status:
+          type: string
+          description: "Technician field status: checked-in | off-shift | offline"
+        isStale:
+          type: boolean
+
+    DailyAttendanceStat:
+      type: object
+      required: [date, checkInAt, isLate]
+      properties:
+        date:
+          type: string
+        checkInAt:
+          type: string
+        checkOutAt:
+          type: string
+          nullable: true
+        totalHours:
+          type: number
+          nullable: true
+        overtimeHours:
+          type: number
+          nullable: true
+        isLate:
+          type: boolean
+
+    SiteVisit:
+      type: object
+      required: [id, customerName, phone, address, purpose, status, technicianIds, createdAt]
+      properties:
+        id:
+          type: string
+        customerName:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+          nullable: true
+        purpose:
+          type: string
+        notes:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [pending, in_progress, completed, cancelled]
+        assignedTo:
+          type: string
+          nullable: true
+        technicianName:
+          type: string
+          nullable: true
+        technicianIds:
+          type: array
+          items:
+            type: string
+        scheduledDate:
+          type: string
+          nullable: true
+        scheduledTime:
+          type: string
+          nullable: true
+        technicianNotes:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+
+    CreateSiteVisitRequest:
+      type: object
+      required: [customerName, phone, address, purpose]
+      properties:
+        customerName:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        purpose:
+          type: string
+        notes:
+          type: string
+        assignedTo:
+          type: string
+        scheduledDate:
+          type: string
+        scheduledTime:
+          type: string
+
+    UpdateSiteVisitRequest:
+      type: object
+      properties:
+        customerName:
+          type: string
+        phone:
+          type: string
+        address:
+          type: string
+        city:
+          type: string
+        purpose:
+          type: string
+        notes:
+          type: string
+        assignedTo:
+          type: string
+        scheduledDate:
+          type: string
+        scheduledTime:
+          type: string
+        status:
+          type: string
+        technicianNotes:
+          type: string
+
+    TechnicianReport:
+      type: object
+      required: [technicianId, technicianName, from, to, totalDays, presentDays, lateDays, totalHours, overtimeHours, bookingsCompleted, sitesCompleted, complaintsHandled, dailyStats]
+      properties:
+        technicianId:
+          type: string
+        technicianName:
+          type: string
+        from:
+          type: string
+        to:
+          type: string
+        totalDays:
+          type: integer
+        presentDays:
+          type: integer
+        lateDays:
+          type: integer
+        absentDays:
+          type: integer
+        totalHours:
+          type: number
+        overtimeHours:
+          type: number
+        bookingsCompleted:
+          type: integer
+        sitesCompleted:
+          type: integer
+        complaintsHandled:
+          type: integer
+        dailyStats:
+          type: array
+          items:
+            $ref: '#/components/schemas/DailyAttendanceStat'

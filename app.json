@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "android": {
+      "package": "com.knssolar.app"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "f2faefa5-6785-4fb3-9b94-b7d8f8383b03"
+      }
+    }
+  }
+}

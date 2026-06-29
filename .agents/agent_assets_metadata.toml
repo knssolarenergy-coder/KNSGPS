@@ -1,0 +1,8 @@
+uploads = []
+outputs = []
+
+[[generated]]
+id = "Lgic15ZgKrjI0vI2-Sr_o"
+uri = "file://artifacts/ks-solar/assets/images/icon.png"
+type = "image"
+title = "ks solar energy app icon"

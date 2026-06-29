@@ -1,0 +1,14 @@
+- [Drizzle push vs migrate](drizzle-push-vs-migrate.md) — dev DB uses drizzle push only; __drizzle_migrations never initialized; always run push after schema changes
+- [React Query enabled option](react-query-enabled.md) — must include queryKey alongside enabled flag in query options, or TS errors occur
+- [Drizzle generate with __dirname](drizzle-generate-dirname.md) — use relative `out: "./drizzle"` not `path.join(__dirname, "./drizzle")` to avoid drizzle-kit path bug; push-only DBs need idempotent migrations
+- [Live map WebView zoom & markers](live-map-webview.md) — don't rebuild map HTML per refresh (resets zoom); push markers via inject/postMessage, fit once, remove stale ids, remount per open
+- [EAS Android build reliability](eas-android-build-reliability.md) — what keeps the standalone Android APK from failing Gradle or crashing on launch
+- [Auth raw fetch](auth-raw-fetch.md) — login uses raw fetch+res.json() (bypasses custom-fetch mutator); "Unexpected end of JSON input" = API server down; parse defensively
+- [Pakistan business-day timezone](pakistan-timezone-business-day.md) — server runs UTC; attendance/"today"/shift windows must use fixed UTC+5 day bounds (no DST), not server-local midnight
+- [Debugging silent bg tracking](tracking-diagnostics.md) — don't ship blind APKs for silent always-on features; build in-app diagnostics + one-tap test ping; readiness gate hides main screen so diagnostics must live in the gate too
+- [Expo bg-location restart](expo-location-restart.md) — hasStartedLocationUpdatesAsync = registration NOT liveness; survives OEM kill & app upgrade; needs heartbeat + config-version forced restart
+- [OpenAPI spec sync](openapi-spec-sync.md) — new route/field needs an openapi.yaml update + codegen rerun, or the hook is never generated and crashes at runtime; `required` fields must hold across ALL endpoints returning that type
+- [Resend sender domain](resend-email-domain.md) — emails must send FROM verified domain knssolar.com.pk (not kssolar.pk); wrong FROM domain = silent reject
+- [Background tracking vs OEM killers](background-tracking-oem-killers.md) — battery-opt off isn't enough; real fix = OEM Autostart guide + self-healing restart each foreground + POST retry; skip background-fetch watchdog
+- [DB composite tsconfig rebuild](db-composite-tsconfig-rebuild.md) — after adding new schema tables run `cd lib/db && pnpm exec tsc --build` or project-reference consumers will get "no exported member" TS errors even though esbuild runtime works
+- [Expo Location timestamp field](expo-location-timestamp.md) — use `loc.timestamp` not `loc.coords.timestamp`; coords.timestamp is undefined, causes silent crash swallowing postLocationResilient in bg task

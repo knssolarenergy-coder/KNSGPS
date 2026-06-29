@@ -1,0 +1,99 @@
+{
+  "expo": {
+    "name": "K&S Solar Energy",
+    "slug": "ks-solar",
+    "version": "1.0.6",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "ks-solar",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/images/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0a0a0a"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.kssolar.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "K&S Solar uses the camera to take check-in selfies and site photos.",
+        "NSPhotoLibraryUsageDescription": "K&S Solar reads photos from your library for site documentation.",
+        "NSLocationWhenInUseUsageDescription": "K&S Solar tracks your location to show your work position on the live map.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "K&S Solar uses background location to share your position with the office even when the app is closed.",
+        "UIBackgroundModes": ["location", "fetch"]
+      }
+    },
+    "android": {
+      "package": "com.kssolar.app",
+      "versionCode": 7,
+      "googleServicesFile": "./google-services.json",
+      "foregroundServiceTypes": ["location"],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/icon_nobg.png",
+        "backgroundColor": "#0a0a0a"
+      },
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "WAKE_LOCK",
+        "POST_NOTIFICATIONS"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      [
+        "expo-router",
+        {
+          "origin": "https://replit.com/"
+        }
+      ],
+      "expo-font",
+      "expo-web-browser",
+      "expo-secure-store",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "K&S Solar accesses your photos for site documentation.",
+          "cameraPermission": "K&S Solar uses the camera for site photos."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#0891B2"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "K&S Solar tracks your location to share your work position with the office, even when the app is in the background.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      "./plugins/withAndroidBuildReliability"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c0426e98-72b7-469f-91b4-756ffb23f2d0"
+      }
+    },
+    "owner": "kns53"
+  }
+}

@@ -1,0 +1,27 @@
+kind = "mobile"
+previewPath = "/"
+title = "K&S Solar Energy"
+version = "1.0.0"
+id = "artifacts/ks-solar"
+router = "expo-domain"
+
+[[integratedSkills]]
+name = "expo"
+version = "1.0.0"
+
+[[services]]
+ensurePreviewReachable = "/status"
+name = "expo"
+paths = [ "/" ]
+localPort = 25115
+
+[services.development]
+run = "pnpm --filter @workspace/ks-solar run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/ks-solar", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/ks-solar", "run", "serve" ]
+
+[services.env]
+PORT = "25115"
+BASE_PATH = "/"
