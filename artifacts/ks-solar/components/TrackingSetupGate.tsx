@@ -172,6 +172,26 @@ export function TrackingSetupGate({
     }
   }, []);
 
+  // Real Doze-whitelist grant: fires the system "Allow app to ignore battery
+  // optimization?" dialog, then re-reads the actual state on return.
+  const handleFixBattery = useCallback(async () => {
+    setBusy("battery");
+    try {
+      try {
+        const IL = require("expo-intent-launcher") as typeof import("expo-intent-launcher");
+        await IL.startActivityAsync(
+          "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+          { data: "package:com.kssolar.app" }
+        );
+      } catch {
+        await Linking.openSettings();
+      }
+      await onRefresh();
+    } finally {
+      setBusy(null);
+    }
+  }, [onRefresh]);
+
   const handleOpenAutostart = useCallback(async () => {
     try {
       const IL = require("expo-intent-launcher") as typeof import("expo-intent-launcher");
@@ -339,7 +359,9 @@ export function TrackingSetupGate({
                         ? handleFixNotification
                         : req.key === "backgroundLocation"
                           ? handleFixBgLocation
-                          : handleFixService
+                          : req.key === "battery"
+                            ? handleFixBattery
+                            : handleFixService
                     }
                     disabled={isBusy}
                     activeOpacity={0.82}

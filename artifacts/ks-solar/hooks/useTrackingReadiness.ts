@@ -3,6 +3,7 @@ import { AppState, Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 import * as Location from "expo-location";
 import { getTrackingLiveness } from "@/backgroundLocationTask";
+import { getIsIgnoringBatteryOptimizations } from "@/modules/battery-optimization";
 
 export type RequirementKey =
   | "notification"
@@ -91,6 +92,12 @@ export function useTrackingReadiness(): TrackingReadinessResult {
           .catch(() => false),
       ]);
 
+    // Real Doze whitelist state when the native module is present; null on web,
+    // Expo Go, or an older APK — then fall back to the self-attested checkbox.
+    const dozeStatus = getIsIgnoringBatteryOptimizations();
+    const batteryRealCheck = dozeStatus !== null;
+    const batteryPass = batteryRealCheck ? (dozeStatus as boolean) : battDone;
+
     setRequirements([
       {
         key: "notification",
@@ -121,12 +128,15 @@ export function useTrackingReadiness(): TrackingReadinessResult {
       },
       {
         key: "battery",
-        labelUrdu: "Battery: Koi Restriction Nahi",
-        descUrdu:
-          'Settings → Apps → K&S Solar → Battery → "Unrestricted" ya "No restriction" select karein.',
-        status: battDone ? "pass" : "fail",
-        isCheckable: false,
-        confirmed: battDone,
+        labelUrdu: batteryRealCheck
+          ? "Battery optimization OFF karein"
+          : "Battery: Koi Restriction Nahi",
+        descUrdu: batteryRealCheck
+          ? 'Is app ke liye battery optimization OFF honi chahiye, warna screen band hone ke ~5 min baad tracking ruk jati hai. "Fix Karein" daba kar dialog mein "Allow" karein.'
+          : 'Settings → Apps → K&S Solar → Battery → "Unrestricted" ya "No restriction" select karein.',
+        status: batteryPass ? "pass" : "fail",
+        isCheckable: batteryRealCheck,
+        confirmed: batteryPass,
       },
       {
         key: "autostart",

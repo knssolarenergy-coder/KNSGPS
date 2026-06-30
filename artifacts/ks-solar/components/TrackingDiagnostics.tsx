@@ -262,6 +262,23 @@ export function TrackingDiagnostics({ visible, onClose }: { visible: boolean; on
                   value={notifPerm}
                   state={notifPerm === "granted" ? "good" : "warn"}
                 />
+                <StatusRow
+                  label="Battery optimization (Doze)"
+                  value={
+                    diag.dozeWhitelisted === null
+                      ? "unknown"
+                      : diag.dozeWhitelisted
+                        ? "OFF (whitelisted)"
+                        : "ON (restricted)"
+                  }
+                  state={
+                    diag.dozeWhitelisted === null
+                      ? "warn"
+                      : diag.dozeWhitelisted
+                        ? "good"
+                        : "bad"
+                  }
+                />
                 <StatusRow label="Phone GPS / location" value={diag.gpsEnabled ? "ON" : "OFF"} state={diag.gpsEnabled ? "good" : "bad"} />
                 <StatusRow label="Logged in (token)" value={diag.tokenPresent ? "yes" : "no"} state={diag.tokenPresent ? "good" : "bad"} />
                 <StatusRow
@@ -296,6 +313,39 @@ export function TrackingDiagnostics({ visible, onClose }: { visible: boolean; on
                 <StatusRow label="App version" value={`${version} (${buildCode})`} state="neutral" />
                 <StatusRow label="Device" value={device} state="neutral" />
                 <StatusRow label="Server" value={diag.baseUrl.replace("https://", "")} state="neutral" />
+
+                <View
+                  style={{
+                    marginTop: 12,
+                    backgroundColor: "#0891B214",
+                    borderRadius: 10,
+                    padding: 11,
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontFamily: "Inter_600SemiBold",
+                      color: "#0E7490",
+                      marginBottom: 3,
+                    }}
+                  >
+                    Screen-lock test
+                  </Text>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      fontFamily: "Inter_400Regular",
+                      color: colors.mutedForeground,
+                      lineHeight: 17,
+                    }}
+                  >
+                    Screen band karne ke baad notification bar mein “K&S Solar — Location Active” dikhti
+                    rehni chahiye. Agar woh gayab ho jaye → app kill ho rahi hai (Autostart ON karein).
+                    Agar woh dikhti rahe magar “Last GPS fix” purana hota jaye → battery optimization
+                    (Doze) band karein.
+                  </Text>
+                </View>
               </View>
             ) : null}
 

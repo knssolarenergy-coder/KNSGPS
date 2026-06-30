@@ -5,6 +5,7 @@
 - [EAS Android build reliability](eas-android-build-reliability.md) — what keeps the standalone Android APK from failing Gradle or crashing on launch
 - [Auth raw fetch](auth-raw-fetch.md) — login uses raw fetch+res.json() (bypasses custom-fetch mutator); "Unexpected end of JSON input" = API server down; parse defensively
 - [Pakistan business-day timezone](pakistan-timezone-business-day.md) — server runs UTC; attendance/"today"/shift windows must use fixed UTC+5 day bounds (no DST), not server-local midnight
+- [Doze whitelist vs OEM unrestricted](doze-whitelist-vs-oem-unrestricted.md) — bg GPS dies ~5min after screen-off unless AOSP Doze whitelist truly granted; read via local Expo module, grant via AOSP intent, don't trust self-attest
 - [Debugging silent bg tracking](tracking-diagnostics.md) — don't ship blind APKs for silent always-on features; build in-app diagnostics + one-tap test ping; readiness gate hides main screen so diagnostics must live in the gate too
 - [Expo bg-location restart](expo-location-restart.md) — hasStartedLocationUpdatesAsync = registration NOT liveness; survives OEM kill & app upgrade; needs heartbeat + config-version forced restart
 - [OpenAPI spec sync](openapi-spec-sync.md) — new route/field needs an openapi.yaml update + codegen rerun, or the hook is never generated and crashes at runtime; `required` fields must hold across ALL endpoints returning that type

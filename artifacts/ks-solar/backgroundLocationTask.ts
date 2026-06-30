@@ -2,6 +2,7 @@ import * as Location from "expo-location";
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
+import { getIsIgnoringBatteryOptimizations } from "@/modules/battery-optimization";
 
 export const LOCATION_TASK_NAME = "ks-solar-bg-location";
 
@@ -423,6 +424,7 @@ export type TrackingDiagnostics = {
   foregroundPermission: string;
   backgroundPermission: string;
   gpsEnabled: boolean;
+  dozeWhitelisted: boolean | null;
   registered: boolean;
   alive: boolean;
   lastFixTs: number;
@@ -456,6 +458,7 @@ export async function getTrackingDiagnostics(): Promise<TrackingDiagnostics> {
       foregroundPermission: "n/a (web)",
       backgroundPermission: "n/a (web)",
       gpsEnabled: false,
+      dozeWhitelisted: null,
       registered: false,
       alive: false,
       lastFixTs: 0,
@@ -489,6 +492,7 @@ export async function getTrackingDiagnostics(): Promise<TrackingDiagnostics> {
     foregroundPermission: fg.status,
     backgroundPermission: bg.status,
     gpsEnabled,
+    dozeWhitelisted: getIsIgnoringBatteryOptimizations(),
     registered,
     alive,
     lastFixTs,
