@@ -9,9 +9,9 @@ dist/
 web-build/
 expo-env.d.ts
 
-# Native
-ios/
-android/
+# Native (anchored to app root so local Expo modules' android/ios sources stay tracked)
+/ios/
+/android/
 *.orig.*
 *.jks
 *.p8
