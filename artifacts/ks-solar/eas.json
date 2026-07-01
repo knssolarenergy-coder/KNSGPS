@@ -10,7 +10,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "kns-2.replit.app"
+        "EXPO_PUBLIC_DOMAIN": "knsgps.replit.app"
       }
     },
     "preview": {
@@ -22,7 +22,7 @@
         "simulator": false
       },
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "kns-2.replit.app"
+        "EXPO_PUBLIC_DOMAIN": "knsgps.replit.app"
       }
     },
     "production": {
@@ -30,7 +30,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_DOMAIN": "kns-2.replit.app"
+        "EXPO_PUBLIC_DOMAIN": "knsgps.replit.app"
       }
     }
   },

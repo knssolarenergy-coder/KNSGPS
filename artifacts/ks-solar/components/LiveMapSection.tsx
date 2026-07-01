@@ -1,5 +1,6 @@
 import { Feather } from "@expo/vector-icons";
 import {
+  useGetMapsToken,
   useGetTechnicianLiveLocations,
   useGetTechnicianTrail,
 } from "@workspace/api-client-react";
@@ -33,86 +34,164 @@ function minutesAgo(iso: string) {
   return `${Math.floor(diff / 60)}h ${diff % 60}m ago`;
 }
 
-function buildMapHtml(): string {
+// ── Mapbox GL JS map HTML (runs inside a sandboxed iframe on web) ─────────────
+// Built once (after the access token is fetched) and never rebuilt — the parent
+// pushes data via postMessage so the user's manual zoom / pan is never reset on
+// a refresh tick. Markers are DOM elements (survive a style switch); the trail
+// is a GeoJSON layer re-applied after every satellite/street style change.
+// The Mapbox access token is fetched at runtime from an admin-only API endpoint
+// (server-side MAPBOX_TOKEN) — never hardcoded in source.
+function buildMapHtml(mapboxToken: string): string {
   return `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.css" rel="stylesheet"/>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.3.0/mapbox-gl.js"></script>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { background: #0f172a; }
-    #map { width: 100vw; height: 100vh; }
-    .pin-wrap { position:relative; width:36px; height:36px; }
-    .pulse-ring { position:absolute;top:-6px;left:-6px;width:48px;height:48px;border-radius:50%;animation:pulse 2s ease-out infinite;border-width:3px;border-style:solid; }
-    @keyframes pulse { 0%{transform:scale(0.6);opacity:0.9;} 100%{transform:scale(1.6);opacity:0;} }
-    .pin-label { width:36px;height:36px;border-radius:50% 50% 50% 0;border:3px solid white;box-shadow:0 3px 10px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;transform:rotate(-45deg);font-weight:800;font-size:14px;color:white;font-family:sans-serif; }
-    .pin-label span { transform:rotate(45deg); }
-    .leaflet-popup-content-wrapper { border-radius:12px!important;padding:0!important;box-shadow:0 8px 24px rgba(0,0,0,0.18)!important; }
-    .leaflet-popup-content { margin:0!important; }
-    .popup-inner { padding:12px 14px;min-width:170px; }
-    .popup-name { font-weight:700;font-size:14px;margin-bottom:5px; }
-    .popup-badge { display:inline-block;font-size:10px;font-weight:700;border-radius:20px;padding:2px 8px;margin-bottom:7px;background:#10B98115;color:#059669;border:1px solid #10B98140; }
-    .popup-row { font-size:12px;color:#555;margin-bottom:2px; }
-    .popup-ping { font-size:12px;font-weight:600;color:#10B981;margin-top:4px; }
+    *{box-sizing:border-box;margin:0;padding:0;}
+    html,body,#map{width:100%;height:100%;background:#e2e8f0;}
+    .pin-col{position:relative;width:28px;height:28px;cursor:pointer;}
+    .pin-dot{width:28px;height:28px;border-radius:14px;box-shadow:0 3px 6px rgba(0,0,0,0.35);}
+    .pin-name{position:absolute;top:32px;left:50%;transform:translateX(-50%);max-width:120px;padding:2px 8px;border-radius:11px;border-width:1.5px;border-style:solid;font-weight:800;font-size:11px;font-family:sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .mapboxgl-ctrl-group{border-radius:10px!important;box-shadow:0 2px 12px rgba(0,0,0,0.15)!important;}
   </style>
 </head>
 <body>
 <div id="map"></div>
 <script>
-(function() {
-  var markerInstances = {};
-  var trailPolyline = null;
-  var map = L.map('map', { zoomControl: true, attributionControl: false });
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-  map.setView([30.3753, 69.3451], 6);
+(function(){
+  mapboxgl.accessToken='${mapboxToken}';
+  var lightStyle='mapbox://styles/mapbox/light-v11';
+  var satStyle='mapbox://styles/mapbox/satellite-streets-v12';
+  var isSat=false;
 
-  function fmtTime(iso) { try { return new Date(iso).toLocaleTimeString('en-PK',{hour:'2-digit',minute:'2-digit',hour12:true}); } catch(e){ return iso; } }
-  function minsAgo(iso) { var diff = Math.floor((Date.now() - new Date(iso).getTime()) / 60000); if(diff < 1) return 'just now'; if(diff === 1) return '1 min ago'; if(diff < 60) return diff + ' min ago'; return Math.floor(diff/60) + 'h ' + (diff%60) + 'm ago'; }
-  function cap(s) { return s.replace(/-/g,' ').replace(/\\b\\w/g,function(c){return c.toUpperCase();}); }
-  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]; }); }
+  var map=new mapboxgl.Map({
+    container:'map',
+    style:lightStyle,
+    center:[69.3451,30.3753],
+    zoom:5,
+    attributionControl:false
+  });
 
-  function makeIcon(color, initial) {
-    return L.divIcon({ className: '', html: '<div class="pin-wrap"><div class="pulse-ring" style="border-color:'+color+'55"></div><div class="pin-label" style="background:'+color+'"><span>'+esc(initial)+'</span></div></div>', iconSize:[36,36], iconAnchor:[18,36], popupAnchor:[0,-42] });
+  var markerMap={};
+  var lastData=[];
+  var selectedId=null;
+  var hasFitted=false;
+  var currentTrail=null;
+  var startMarker=null, endMarker=null;
+
+  function post(o){ try{ window.parent.postMessage(o,'*'); }catch(e){} }
+  function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c];});}
+
+  function elHtml(d,sel){
+    var scale=sel?1.18:1;
+    var border=sel?'border:3px solid #fff;':'border:2px solid #fff;';
+    return '<div class="pin-dot" style="background:'+d.color+';'+border+'transform:scale('+scale+');"></div>'
+      +'<div class="pin-name" style="border-color:'+d.color+';background:'+(sel?d.color:'#fff')+';color:'+(sel?'#fff':d.color)+';">'+esc(d.name)+'</div>';
   }
-  function makePopup(d) {
-    return '<div class="popup-inner"><div class="popup-name" style="color:'+d.color+'">'+esc(d.name)+'</div><div class="popup-badge">● '+cap(d.status)+'</div>'+(d.checkInAt?'<div class="popup-row">🕐 In: '+fmtTime(d.checkInAt)+'</div>':'')+'<div class="popup-row">📍 '+d.lat.toFixed(5)+', '+d.lng.toFixed(5)+'</div>'+(d.address?'<div class="popup-row">'+esc(d.address)+'</div>':'')+'<div class="popup-ping">📡 '+minsAgo(d.recordedAt)+'</div></div>';
+  function makeEl(d,sel){
+    var el=document.createElement('div');
+    el.className='pin-col';
+    el.innerHTML=elHtml(d,sel);
+    return el;
   }
 
-  function setMarkers(data) {
-    var latlngs = []; var seen = {};
-    data.forEach(function(d) {
-      if(isNaN(d.lat)||isNaN(d.lng)) return;
-      seen[d.id] = true; latlngs.push([d.lat, d.lng]);
-      if(markerInstances[d.id]) { markerInstances[d.id].setLatLng([d.lat,d.lng]); markerInstances[d.id].setPopupContent(makePopup(d)); }
-      else { var m = L.marker([d.lat,d.lng],{icon:makeIcon(d.color,d.name.trim().charAt(0).toUpperCase())}).bindPopup(makePopup(d),{maxWidth:220}).addTo(map); markerInstances[d.id] = m; }
-    });
-    Object.keys(markerInstances).forEach(function(id){ if(!seen[id]){ map.removeLayer(markerInstances[id]); delete markerInstances[id]; } });
-    return latlngs;
-  }
-
-  var hasFitted = false;
-  function fitView(latlngs) {
-    if(hasFitted) return;
-    if(latlngs.length === 1) { map.setView(latlngs[0], 14); hasFitted = true; }
-    else if(latlngs.length > 1) { map.fitBounds(latlngs, {padding:[48,48], maxZoom:14}); hasFitted = true; }
-  }
-
-  window.addEventListener('message', function(e) {
-    if(!e.data) return;
-    if(e.data.type === 'UPDATE_MARKERS') { fitView(setMarkers(e.data.markers)); }
-    else if(e.data.type === 'SHOW_TRAIL') {
-      if(trailPolyline) { map.removeLayer(trailPolyline); trailPolyline = null; }
-      if(e.data.latlngs && e.data.latlngs.length > 0) {
-        trailPolyline = L.polyline(e.data.latlngs, {color: e.data.color || '#3B82F6', weight: 4, opacity: 0.75}).addTo(map);
-        map.setView(e.data.latlngs[e.data.latlngs.length - 1], Math.max(map.getZoom(), 14));
+  function setMarkers(data){
+    lastData=data;
+    var seen={}; var coords=[];
+    data.forEach(function(d){
+      if(isNaN(d.lat)||isNaN(d.lng))return;
+      seen[d.id]=true; coords.push([d.lng,d.lat]);
+      var sel=d.id===selectedId;
+      if(markerMap[d.id]){
+        markerMap[d.id].setLngLat([d.lng,d.lat]);
+        markerMap[d.id].getElement().innerHTML=elHtml(d,sel);
+      } else {
+        var el=makeEl(d,sel);
+        var m=new mapboxgl.Marker({element:el,anchor:'center'}).setLngLat([d.lng,d.lat]).addTo(map);
+        (function(id){ el.addEventListener('click',function(){ post({type:'selectTech',techId:id}); }); })(d.id);
+        markerMap[d.id]=m;
       }
-    } else if(e.data.type === 'CLEAR_TRAIL') {
-      if(trailPolyline) { map.removeLayer(trailPolyline); trailPolyline = null; }
+    });
+    Object.keys(markerMap).forEach(function(id){
+      if(!seen[id]){ markerMap[id].remove(); delete markerMap[id]; }
+    });
+    return coords;
+  }
+
+  function refreshSelection(){
+    lastData.forEach(function(d){
+      var m=markerMap[d.id];
+      if(m){ m.getElement().innerHTML=elHtml(d,d.id===selectedId); }
+    });
+  }
+
+  function fitTo(coords){
+    if(coords.length===1){ map.flyTo({center:coords[0],zoom:14}); }
+    else {
+      var b=coords.reduce(function(bb,c){return bb.extend(c);},new mapboxgl.LngLatBounds(coords[0],coords[0]));
+      map.fitBounds(b,{padding:60,maxZoom:14});
+    }
+  }
+
+  function removeTrailLayer(){
+    if(map.getLayer('trail-line'))map.removeLayer('trail-line');
+    if(map.getSource('trail'))map.removeSource('trail');
+  }
+  function applyTrail(){
+    removeTrailLayer();
+    if(!currentTrail)return;
+    map.addSource('trail',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:currentTrail.coords}}});
+    map.addLayer({id:'trail-line',type:'line',source:'trail',layout:{'line-cap':'round','line-join':'round'},paint:{'line-color':currentTrail.color,'line-width':4,'line-opacity':0.9}});
+  }
+  function dot(color){var e=document.createElement('div');e.style.cssText='width:13px;height:13px;border-radius:7px;background:'+color+';border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.4);';return e;}
+  function clearTrailEnds(){if(startMarker){startMarker.remove();startMarker=null;}if(endMarker){endMarker.remove();endMarker=null;}}
+  function setTrailEnds(coords){
+    clearTrailEnds();
+    startMarker=new mapboxgl.Marker({element:dot('#94A3B8')}).setLngLat(coords[0]).addTo(map);
+    endMarker=new mapboxgl.Marker({element:dot('#10B981')}).setLngLat(coords[coords.length-1]).addTo(map);
+  }
+  function showTrail(latlngs,color){
+    // Parent sends [lat,lng]; Mapbox needs [lng,lat].
+    var coords=(latlngs||[]).map(function(c){return [c[1],c[0]];});
+    if(coords.length>=2){
+      currentTrail={coords:coords,color:color||'#3B82F6'};
+      applyTrail();
+      setTrailEnds(coords);
+      var b=coords.reduce(function(bb,c){return bb.extend(c);},new mapboxgl.LngLatBounds(coords[0],coords[0]));
+      map.fitBounds(b,{padding:60,maxZoom:15});
+    } else { clearTrail(); }
+  }
+  function clearTrail(){ currentTrail=null; applyTrail(); clearTrailEnds(); }
+
+  function setSatellite(sat){
+    if(sat===isSat)return;
+    isSat=sat;
+    map.setStyle(sat?satStyle:lightStyle);
+    // Sources/layers are wiped on style change; markers (DOM) survive.
+    map.once('style.load',function(){ applyTrail(); });
+  }
+
+  window.addEventListener('message',function(e){
+    var d=e.data; if(!d||!d.type)return;
+    if(d.type==='UPDATE_MARKERS'){
+      selectedId=d.selectedId||null;
+      var coords=setMarkers(d.markers||[]);
+      if(!hasFitted&&coords.length){ hasFitted=true; fitTo(coords); }
+      refreshSelection();
+    } else if(d.type==='SHOW_TRAIL'){ showTrail(d.latlngs,d.color); }
+    else if(d.type==='CLEAR_TRAIL'){ clearTrail(); }
+    else if(d.type==='SET_SATELLITE'){ setSatellite(!!d.sat); }
+    else if(d.type==='FLY_TO'&&d.techId){
+      selectedId=d.techId; refreshSelection();
+      var m=markerMap[d.techId]; if(m){ map.flyTo({center:m.getLngLat(),zoom:15}); }
     }
   });
+
+  // Tell the parent the map is ready so it can push the first batch of data.
+  map.on('load',function(){ post({type:'ready'}); });
 })();
 </script>
 </body>
@@ -123,10 +202,10 @@ export function LiveMapSection() {
   const colors = useColors();
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const mapReadyRef = useRef(false);
-  const [mapKey] = useState(0);
   const [selectedTechId, setSelectedTechId] = useState<string | null>(null);
+  const [isSat, setIsSat] = useState(false);
   const selectedColorRef = useRef<string>("#3B82F6");
-  const locsRef = useRef<Array<{ id: string; lat: number; lng: number; name: string; color: string; status: string; checkInAt: string | null; recordedAt: string; address: string; isStale: boolean }>>([]);
+  const locsRef = useRef<Array<{ id: string; lat: number; lng: number; name: string; color: string }>>([]);
 
   const { data: locations, isRefetching, isLoading } = useGetTechnicianLiveLocations({
     query: { queryKey: ["tech-live-section"], refetchInterval: 30_000 },
@@ -137,6 +216,17 @@ export function LiveMapSection() {
   const { data: trail, isLoading: trailLoading } = useGetTechnicianTrail(
     selectedTechId ?? "",
     { query: { queryKey: ["trail-section", selectedTechId], enabled: !!selectedTechId, refetchInterval: selectedTechId ? 30_000 : false } }
+  );
+
+  // Mapbox access token — fetched at runtime (never hardcoded). The map HTML is
+  // built only once the token arrives, then the iframe mounts.
+  const { data: mapsTokenData } = useGetMapsToken({
+    query: { queryKey: ["maps-token"], staleTime: Infinity },
+  });
+  const mapboxToken = mapsTokenData?.token;
+  const mapHtml = useMemo(
+    () => (mapboxToken ? buildMapHtml(mapboxToken) : null),
+    [mapboxToken],
   );
 
   const locs = useMemo(() => (
@@ -150,52 +240,110 @@ export function LiveMapSection() {
       lng: parseFloat(loc.longitude),
       name: loc.name,
       color: TECH_COLORS[idx % TECH_COLORS.length],
-      status: loc.status,
-      checkInAt: loc.checkInAt ?? null,
-      recordedAt: loc.recordedAt,
-      address: loc.address ?? "",
-      isStale: loc.isStale,
     }));
   }
   locsRef.current = buildPayload();
 
-  function pushMarkers() {
-    if (!mapReadyRef.current) return;
-    iframeRef.current?.contentWindow?.postMessage({ type: "UPDATE_MARKERS", markers: locsRef.current }, "*");
+  function post(msg: Record<string, unknown>) {
+    iframeRef.current?.contentWindow?.postMessage(msg, "*");
   }
 
-  useEffect(() => { pushMarkers(); }, [locations]);
-
-  useEffect(() => {
+  function pushMarkers() {
     if (!mapReadyRef.current) return;
-    if (!selectedTechId) {
-      iframeRef.current?.contentWindow?.postMessage({ type: "CLEAR_TRAIL" }, "*");
-      return;
-    }
-    if (!trail || trail.length === 0) {
-      iframeRef.current?.contentWindow?.postMessage({ type: "CLEAR_TRAIL" }, "*");
+    post({ type: "UPDATE_MARKERS", markers: locsRef.current, selectedId: selectedTechId });
+  }
+
+  function pushTrail() {
+    if (!mapReadyRef.current) return;
+    if (!selectedTechId || !trail || trail.length === 0) {
+      post({ type: "CLEAR_TRAIL" });
       return;
     }
     const valid = trail.filter(p => !isNaN(parseFloat(p.latitude)) && !isNaN(parseFloat(p.longitude)));
     const latlngs = valid.map(p => [parseFloat(p.latitude), parseFloat(p.longitude)]);
-    iframeRef.current?.contentWindow?.postMessage({ type: "SHOW_TRAIL", latlngs, color: selectedColorRef.current }, "*");
-  }, [trail, selectedTechId]);
+    if (latlngs.length < 2) { post({ type: "CLEAR_TRAIL" }); return; }
+    post({ type: "SHOW_TRAIL", latlngs, color: selectedColorRef.current });
+  }
 
-  const htmlContent = useMemo(() => buildMapHtml(), []);
+  useEffect(() => { pushMarkers(); }, [locations, selectedTechId]);
+  useEffect(() => { pushTrail(); }, [trail, selectedTechId]);
+  useEffect(() => {
+    if (mapReadyRef.current && selectedTechId) post({ type: "FLY_TO", techId: selectedTechId });
+  }, [selectedTechId]);
+
+  // Fresh-closure handlers for messages arriving from the iframe (map load /
+  // marker clicks). Registered once; the ref is reassigned every render so the
+  // handler always sees the latest state.
+  const handlersRef = useRef<{ onReady: () => void; onSelect: (id: string) => void }>({
+    onReady: () => {},
+    onSelect: () => {},
+  });
+  handlersRef.current.onReady = () => {
+    mapReadyRef.current = true;
+    pushMarkers();
+    pushTrail();
+    if (selectedTechId) post({ type: "FLY_TO", techId: selectedTechId });
+  };
+  handlersRef.current.onSelect = (techId: string) => {
+    if (selectedTechId === techId) {
+      setSelectedTechId(null);
+      selectedColorRef.current = "#3B82F6";
+      post({ type: "CLEAR_TRAIL" });
+    } else {
+      const idx = locs.findIndex(l => l.technicianId === techId);
+      selectedColorRef.current = TECH_COLORS[(idx < 0 ? 0 : idx) % TECH_COLORS.length];
+      setSelectedTechId(techId);
+      post({ type: "CLEAR_TRAIL" });
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    function onMsg(e: MessageEvent) {
+      if (e.source !== iframeRef.current?.contentWindow) return;
+      const d = e.data as { type?: string; techId?: string } | null;
+      if (!d || !d.type) return;
+      if (d.type === "ready") handlersRef.current.onReady();
+      else if (d.type === "selectTech" && typeof d.techId === "string") handlersRef.current.onSelect(d.techId);
+    }
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+
+  function handleSatToggle() {
+    setIsSat(prev => {
+      const next = !prev;
+      post({ type: "SET_SATELLITE", sat: next });
+      return next;
+    });
+  }
 
   return (
     <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
       <View style={[s.mapWrapper, { borderColor: colors.border }]}>
-        {/* @ts-ignore — iframe is valid DOM element in Expo web */}
-        <iframe
-          key={mapKey}
-          ref={iframeRef}
-          srcDoc={htmlContent}
-          style={{ width: "100%", height: "100%", border: "none", borderRadius: 0, display: "block" }}
-          onLoad={() => { mapReadyRef.current = true; pushMarkers(); }}
-          title="Live Technician Map"
-          sandbox="allow-scripts"
-        />
+        {mapHtml ? (
+          // @ts-ignore — iframe is valid DOM element in Expo web
+          <iframe
+            ref={iframeRef}
+            srcDoc={mapHtml}
+            style={{ width: "100%", height: "100%", border: "none", borderRadius: 0, display: "block" }}
+            onLoad={() => { /* map posts {type:'ready'} once Mapbox has loaded */ }}
+            title="Live Technician Map"
+            sandbox="allow-scripts allow-same-origin"
+          />
+        ) : (
+          <View style={[s.mapLoading, { backgroundColor: colors.muted }]}>
+            <ActivityIndicator size="large" color="#0891B2" />
+          </View>
+        )}
+
+        {/* Satellite / street toggle (top-left) */}
+        {mapHtml && (
+          <TouchableOpacity style={s.satBtn} onPress={handleSatToggle} activeOpacity={0.85}>
+            <Text style={s.satBtnText}>{isSat ? "🗺 Street" : "🛰 Satellite"}</Text>
+          </TouchableOpacity>
+        )}
+
         <View style={s.liveBadge}>
           <View style={s.liveDot} />
           <Text style={s.liveText}>{isRefetching ? "UPDATING" : "LIVE"}</Text>
@@ -239,11 +387,11 @@ export function LiveMapSection() {
                   if (isSelected) {
                     setSelectedTechId(null);
                     selectedColorRef.current = "#3B82F6";
-                    if (mapReadyRef.current) iframeRef.current?.contentWindow?.postMessage({ type: "CLEAR_TRAIL" }, "*");
+                    if (mapReadyRef.current) post({ type: "CLEAR_TRAIL" });
                   } else {
                     setSelectedTechId(loc.technicianId);
                     selectedColorRef.current = pinColor;
-                    if (mapReadyRef.current) iframeRef.current?.contentWindow?.postMessage({ type: "CLEAR_TRAIL" }, "*");
+                    if (mapReadyRef.current) post({ type: "CLEAR_TRAIL" });
                   }
                 }}
                 activeOpacity={0.85}
@@ -347,6 +495,23 @@ export function LiveMapSection() {
 
 const s = StyleSheet.create({
   mapWrapper: { marginHorizontal: 14, marginTop: 14, borderRadius: 16, overflow: "hidden", height: 340, borderWidth: 1, borderColor: "#0891B222" },
+  mapLoading: { width: "100%", height: "100%", alignItems: "center", justifyContent: "center" },
+  satBtn: {
+    position: "absolute",
+    top: 10,
+    left: 10,
+    zIndex: 1000,
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.22,
+    shadowRadius: 4,
+    elevation: 6,
+  },
+  satBtnText: { fontSize: 13, fontFamily: "Inter_700Bold", color: "#1e293b" },
   liveBadge: { position: "absolute", top: 10, right: 10, flexDirection: "row", alignItems: "center", gap: 5, backgroundColor: "rgba(0,0,0,0.72)", borderRadius: 20, paddingHorizontal: 10, paddingVertical: 5, zIndex: 1000 },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: "#EF4444" },
   liveText: { color: "white", fontSize: 11, fontFamily: "Inter_700Bold", letterSpacing: 1 },
