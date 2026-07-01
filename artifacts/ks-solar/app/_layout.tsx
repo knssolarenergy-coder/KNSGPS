@@ -33,7 +33,14 @@ if (Platform.OS !== "web") {
 
 if (Platform.OS === "web") {
   if (typeof window !== "undefined") {
-    setBaseUrl(window.location.origin);
+    // In Replit dev the web bundle is served from the Expo dev domain, which
+    // does not proxy /api. Prefer the configured API domain when available;
+    // fall back to same-origin (production web, where /api shares the origin).
+    setBaseUrl(
+      process.env.EXPO_PUBLIC_DOMAIN
+        ? `https://${process.env.EXPO_PUBLIC_DOMAIN}`
+        : window.location.origin,
+    );
   }
 } else {
   setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
@@ -49,7 +56,9 @@ const queryClient = new QueryClient({
 
 const API_BASE =
   Platform.OS === "web" && typeof window !== "undefined"
-    ? `${window.location.origin}/api`
+    ? process.env.EXPO_PUBLIC_DOMAIN
+      ? `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`
+      : `${window.location.origin}/api`
     : `https://${process.env.EXPO_PUBLIC_DOMAIN}/api`;
 
 function PushManager() {
