@@ -62,18 +62,33 @@ function buildMapHtml(mapboxToken: string): string {
 <div id="map"></div>
 <script>
 (function(){
+  function fail(msg){
+    var el=document.getElementById('map');
+    if(el){el.style.background='#f1f5f9';el.innerHTML='<div style="display:flex;align-items:center;justify-content:center;height:100%;padding:24px;text-align:center;font-family:sans-serif;color:#475569;font-size:13px;line-height:1.5;">'+msg+'</div>';}
+  }
+  // Mapbox GL needs WebGL; older browsers / GPU-less environments can't run it.
+  if(mapboxgl.supported && !mapboxgl.supported()){
+    fail('This map requires WebGL, which is unavailable in this browser.');
+    return;
+  }
   mapboxgl.accessToken='${mapboxToken}';
   var lightStyle='mapbox://styles/mapbox/light-v11';
   var satStyle='mapbox://styles/mapbox/satellite-streets-v12';
   var isSat=false;
 
-  var map=new mapboxgl.Map({
-    container:'map',
-    style:lightStyle,
-    center:[69.3451,30.3753],
-    zoom:5,
-    attributionControl:false
-  });
+  var map;
+  try{
+    map=new mapboxgl.Map({
+      container:'map',
+      style:lightStyle,
+      center:[69.3451,30.3753],
+      zoom:5,
+      attributionControl:false
+    });
+  }catch(err){
+    fail('This map requires WebGL, which is unavailable in this browser.');
+    return;
+  }
 
   var markerMap={};
   var lastData=[];
@@ -141,6 +156,9 @@ function buildMapHtml(mapboxToken: string): string {
     if(map.getSource('trail'))map.removeSource('trail');
   }
   function applyTrail(){
+    // addSource/addLayer throw if the (new) style isn't loaded yet — e.g. a
+    // trail refresh arriving mid satellite/street switch. Defer until ready.
+    if(!map.isStyleLoaded()){ map.once('style.load',applyTrail); return; }
     removeTrailLayer();
     if(!currentTrail)return;
     map.addSource('trail',{type:'geojson',data:{type:'Feature',geometry:{type:'LineString',coordinates:currentTrail.coords}}});
