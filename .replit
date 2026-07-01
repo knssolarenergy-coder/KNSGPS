@@ -50,5 +50,16 @@ localPort = 8080
 externalPort = 80
 
 [[ports]]
+localPort = 8099
+externalPort = 8099
+
+[[ports]]
 localPort = 25115
 externalPort = 3000
+
+[[ports]]
+localPort = 25200
+externalPort = 3001
+
+[deployment]
+deploymentTarget = "cloudrun"

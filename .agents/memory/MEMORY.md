@@ -13,3 +13,4 @@
 - [Background tracking vs OEM killers](background-tracking-oem-killers.md) — battery-opt off isn't enough; real fix = OEM Autostart guide + self-healing restart each foreground + POST retry; skip background-fetch watchdog
 - [DB composite tsconfig rebuild](db-composite-tsconfig-rebuild.md) — after adding new schema tables run `cd lib/db && pnpm exec tsc --build` or project-reference consumers will get "no exported member" TS errors even though esbuild runtime works
 - [Expo Location timestamp field](expo-location-timestamp.md) — use `loc.timestamp` not `loc.coords.timestamp`; coords.timestamp is undefined, causes silent crash swallowing postLocationResilient in bg task
+- [K&S Solar deployment](ks-solar-deployment.md) — publish fails at "Creating Autoscale service" from >1 external port; needs single external port + Reserved VM (always-on cron jobs)
