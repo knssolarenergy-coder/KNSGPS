@@ -1,0 +1,45 @@
+Fix a background location tracking bug on Android (Tecno/HiOS devices, Android 16).
+
+SYMPTOM: In backgroundLocationTask.ts, GPS location updates stop being delivered 
+to the TaskManager callback (LOCATION_TASK_NAME) after the app is backgrounded 
+for ~20 minutes — even though the foreground service notification stays visible 
+and Doze battery optimization is confirmed whitelisted. The expo-background-task 
+watchdog (WATCHDOG_TASK_NAME) also never fires — diagnostics screen shows 
+"Background task last ran: never" even after 23+ minutes, when it should run 
+every ~15 minutes.
+
+Please make these changes:
+
+1. In modules/battery-optimization.ts, add a new exported async function 
+   requestIgnoreBatteryOptimizations() that uses the expo-intent-launcher 
+   package to fire the Android "android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" 
+   intent with data "package:com.kssolar.app". If that throws, fall back to 
+   launching IntentLauncher.ActivityAction.APPLICATION_DETAILS_SETTINGS for the 
+   same package. Install expo-intent-launcher via `npx expo install expo-intent-launcher` 
+   if it isn't already a dependency.
+
+2. In backgroundLocationTask.ts, inside startAlwaysOnTrackingImpl(), right after 
+   background location permission is confirmed granted (bgStatus === "granted"), 
+   check getIsIgnoringBatteryOptimizations() — if false, call 
+   requestIgnoreBatteryOptimizations(). Wrap in try/catch so it never blocks 
+   tracking start.
+
+3. On the existing Tracking Diagnostics screen, add a "Fix Background Tracking" 
+   button that calls requestIgnoreBatteryOptimizations() directly — this is the 
+   reliable fallback for when the automatic prompt is missed or blocked.
+
+4. Double-check that registerTrackingWatchdog() is actually being called and 
+   succeeding on this build — the diagnostics showed the watchdog task has 
+   NEVER run after 23+ minutes despite being "armed"/registered. Add a console 
+   log or diagnostic field confirming BackgroundTask.registerTaskAsync() 
+   succeeded (not just that isTaskRegisteredAsync returns true), and check 
+   whether any expo-background-task version/config issue could be preventing 
+   it from actually being scheduled by WorkManager on Android 16.
+
+5. Bump app.json -> expo.version to "1.0.14" and expo.android.versionCode to 15.
+
+6. After changes are made and verified with no errors, run:
+   eas build --platform android --profile production
+   
+   Let me know when the build completes so I can uninstall the old app (v1.0.11) 
+   and install the fresh build on the test device.

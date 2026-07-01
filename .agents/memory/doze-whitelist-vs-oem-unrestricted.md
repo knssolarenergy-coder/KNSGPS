@@ -36,6 +36,13 @@ background tracking. Read the REAL state and fire the real grant.
 **Why:** survived 3 config-only fix rounds (perms, FGS type, self-heal heartbeat)
 because the actual gap was the Doze exemption never being truly granted/verified.
 
+**Auto-prompt throttle:** the tracking-start routine runs on EVERY app foreground,
+so auto-firing the grant dialog whenever `isIgnoring === false` nags the user on
+every open until they allow. Gate the auto-prompt with a once-per-launch flag, and
+fire-and-forget (don't await) so the dialog never delays the FGS start. Only prompt
+on a definitive `false`; `null` = can't read (web/Expo Go/old APK) → skip. Always
+also expose a manual "Fix Background Tracking" button as the reliable fallback.
+
 **Note:** AOSP Doze whitelist is separate from OEM autostart/auto-launch (the
 other half of the kill problem) — keep both as distinct readiness rows. A wake
 lock is a battery-heavy last resort; confirm Doze whitelist is true (and whether

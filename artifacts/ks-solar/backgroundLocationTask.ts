@@ -2,7 +2,7 @@ import * as Location from "expo-location";
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
-import { getIsIgnoringBatteryOptimizations } from "@/modules/battery-optimization";
+import { getIsIgnoringBatteryOptimizations, requestIgnoreBatteryOptimizations } from "@/modules/battery-optimization";
 
 export const LOCATION_TASK_NAME = "ks-solar-bg-location";
 
@@ -38,6 +38,11 @@ const STALE_MS = 5 * 60 * 1000;
 // panel (and a one-tap test ping) can show the REAL reason tracking isn't working.
 const LAST_BG_POST_KEY = "ks_solar_last_bg_post";
 const LAST_START_KEY = "ks_solar_last_start";
+
+// startAlwaysOnTracking() runs on every app foreground, so auto-prompt the Doze
+// whitelist grant at most ONCE per app launch — otherwise a not-yet-whitelisted
+// technician would get the system battery dialog popped every time they open the app.
+let didAutoPromptBatteryOpt = false;
 
 type QueuedPing = { latitude: string; longitude: string; recordedAt: string };
 
@@ -250,6 +255,20 @@ export async function startAlwaysOnTracking(): Promise<boolean> {
       await recordStart(false, `background permission ${bgStatus} (need "Allow all the time")`);
       return false;
     }
+
+    // Doze whitelist grant. On budget OEMs (Tecno/HiOS, Infinix, Realme, Oppo…)
+    // the location foreground service is throttled/killed minutes after the screen
+    // turns off unless this app is on the AOSP Doze battery-optimization whitelist
+    // — which is SEPARATE from the OEM per-app "unrestricted" toggle. If we can
+    // read the real state and it is definitively OFF, fire the system grant dialog
+    // once per launch. `null` (old APK / Expo Go) = can't read → don't prompt.
+    // Fire-and-forget + try/catch so showing the dialog never blocks the start.
+    try {
+      if (!didAutoPromptBatteryOpt && getIsIgnoringBatteryOptimizations() === false) {
+        didAutoPromptBatteryOpt = true;
+        void requestIgnoreBatteryOptimizations().catch(() => {});
+      }
+    } catch {}
 
     // hasStartedLocationUpdatesAsync() only reports that the task is REGISTERED,
     // not that the foreground service is alive or running the current config. So

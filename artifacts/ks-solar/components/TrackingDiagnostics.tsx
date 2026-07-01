@@ -20,6 +20,7 @@ import {
   type TestPingResult,
   type TrackingDiagnostics as Diagnostics,
 } from "@/backgroundLocationTask";
+import { requestIgnoreBatteryOptimizations } from "@/modules/battery-optimization";
 import { useColors } from "@/hooks/useColors";
 
 function ageLabel(ts: number): string {
@@ -85,6 +86,7 @@ export function TrackingDiagnostics({ visible, onClose }: { visible: boolean; on
   const [loading, setLoading] = useState(false);
   const [testing, setTesting] = useState(false);
   const [restarting, setRestarting] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const [testResult, setTestResult] = useState<TestPingResult | null>(null);
 
   const load = useCallback(async () => {
@@ -129,6 +131,20 @@ export function TrackingDiagnostics({ visible, onClose }: { visible: boolean; on
       await load();
     } finally {
       setRestarting(false);
+    }
+  }, [load]);
+
+  // Reliable manual fallback for the Doze whitelist grant — fires the system
+  // "ignore battery optimizations" dialog directly, for when the automatic prompt
+  // on tracking-start was missed or blocked by the OEM. This is the #1 cause of
+  // tracking dying minutes after the screen turns off on budget Android phones.
+  const onFixBattery = useCallback(async () => {
+    setFixing(true);
+    try {
+      await requestIgnoreBatteryOptimizations();
+      await load();
+    } finally {
+      setFixing(false);
     }
   }, [load]);
 
@@ -383,6 +399,37 @@ export function TrackingDiagnostics({ visible, onClose }: { visible: boolean; on
               </View>
             )}
           </ScrollView>
+
+          {/* Doze whitelist quick-fix — the #1 cause of tracking dying after the
+              screen turns off on budget OEMs. Reliable fallback if the automatic
+              prompt on tracking-start was missed or blocked. */}
+          {Platform.OS !== "web" && (
+            <View style={{ paddingHorizontal: 18, paddingTop: 14 }}>
+              <TouchableOpacity
+                onPress={onFixBattery}
+                disabled={fixing}
+                style={{
+                  backgroundColor: "#F59E0B",
+                  borderRadius: 11,
+                  paddingVertical: 13,
+                  alignItems: "center",
+                  flexDirection: "row",
+                  justifyContent: "center",
+                  gap: 8,
+                  opacity: fixing ? 0.6 : 1,
+                }}
+              >
+                {fixing ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Feather name="zap" size={15} color="#fff" />
+                )}
+                <Text style={{ color: "#fff", fontSize: 14, fontFamily: "Inter_700Bold" }}>
+                  Fix Background Tracking
+                </Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
           {/* Actions */}
           <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 18, paddingTop: 14 }}>
