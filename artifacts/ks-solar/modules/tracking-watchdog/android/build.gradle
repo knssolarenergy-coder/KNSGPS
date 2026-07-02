@@ -1,0 +1,21 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.kssolar.trackingwatchdog'
+version = '0.1.0'
+
+android {
+  namespace "com.kssolar.trackingwatchdog"
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+  }
+}
+
+dependencies {
+  // WorkManager powers the 15-minute backstop pass that keeps the watchdog
+  // alive when exact alarms are revoked or cleared.
+  implementation 'androidx.work:work-runtime-ktx:2.9.1'
+}

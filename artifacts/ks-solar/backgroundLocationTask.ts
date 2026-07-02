@@ -3,6 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { getIsIgnoringBatteryOptimizations, requestIgnoreBatteryOptimizations } from "@/modules/battery-optimization";
+import { getWatchdogStatus, setWatchdogEnabled, type WatchdogStatus } from "@/modules/tracking-watchdog";
 
 export const LOCATION_TASK_NAME = "ks-solar-bg-location";
 
@@ -334,6 +335,14 @@ export async function startAlwaysOnTracking(): Promise<boolean> {
     }
 
     await recordStart(true, needsRestart ? "service (re)started" : "service already running");
+
+    // Arm the native auto-revive watchdog: a ~2-min exact-alarm chain (+15-min
+    // WorkManager backstop) that natively restores this foreground service —
+    // notification included — after HiOS/Tecno kills the app (notification
+    // swipe / recents swipe). Re-arming on every foreground is intentional:
+    // it restores the alarm chain if the OEM cleared it. No-op on old APKs.
+    setWatchdogEnabled(true);
+
     return true;
   } catch (e: unknown) {
     // Graceful — background permission denied or a transient error.
@@ -452,6 +461,8 @@ export type TrackingDiagnostics = {
   queueLength: number;
   lastStart: { ts: number; ok: boolean; reason: string } | null;
   lastBgPost: { ts: number; ok: boolean; status: number | null; error: string | null } | null;
+  /** Auto-revive watchdog state; null on web/Expo Go/old APKs. */
+  watchdog: WatchdogStatus | null;
 };
 
 function safeParse<T>(raw: string | null): T | null {
@@ -486,6 +497,7 @@ export async function getTrackingDiagnostics(): Promise<TrackingDiagnostics> {
       queueLength: 0,
       lastStart: null,
       lastBgPost: null,
+      watchdog: null,
     };
   }
   const [token, fg, bg, gpsEnabled, registered, lastLocRaw, startedRaw, cfgRaw, queue, lastStartRaw, lastPostRaw] =
@@ -520,12 +532,16 @@ export async function getTrackingDiagnostics(): Promise<TrackingDiagnostics> {
     queueLength: queue.length,
     lastStart: safeParse(lastStartRaw),
     lastBgPost: safeParse(lastPostRaw),
+    watchdog: getWatchdogStatus(),
   };
 }
 
 /** Stop background tracking. Call on logout. */
 export async function stopBackgroundLocation(): Promise<void> {
   if (Platform.OS === "web") return;
+  // Disarm the auto-revive watchdog FIRST so it cannot resurrect the service
+  // we are about to stop.
+  setWatchdogEnabled(false);
   try {
     const already = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);
     if (already) await Location.stopLocationUpdatesAsync(LOCATION_TASK_NAME);

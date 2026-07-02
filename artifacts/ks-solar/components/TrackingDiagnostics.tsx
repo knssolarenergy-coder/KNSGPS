@@ -325,6 +325,43 @@ export function TrackingDiagnostics({ visible, onClose }: { visible: boolean; on
                     state={diag.lastStart.ok ? "good" : "bad"}
                   />
                 )}
+                <StatusRow
+                  label="Auto-revive watchdog"
+                  value={
+                    diag.watchdog === null
+                      ? "not available (old APK)"
+                      : diag.watchdog.enabled
+                        ? "active"
+                        : "off"
+                  }
+                  state={diag.watchdog === null ? "warn" : diag.watchdog.enabled ? "good" : "bad"}
+                />
+                {diag.watchdog && (
+                  <>
+                    <StatusRow
+                      label="Exact alarms allowed"
+                      value={diag.watchdog.canScheduleExactAlarms ? "yes" : "no (revival slower)"}
+                      state={diag.watchdog.canScheduleExactAlarms ? "good" : "warn"}
+                    />
+                    <StatusRow
+                      label="Watchdog last ran"
+                      value={
+                        diag.watchdog.lastRunTs
+                          ? `${ageLabel(diag.watchdog.lastRunTs)} (${diag.watchdog.lastRunSource ?? "?"})`
+                          : "not yet"
+                      }
+                      state={diag.watchdog.lastRunTs ? "neutral" : "warn"}
+                    />
+                    <StatusRow
+                      label="Last auto-revival"
+                      value={ageLabel(diag.watchdog.lastRevivalTs)}
+                      state="neutral"
+                    />
+                    {diag.watchdog.lastError && (
+                      <StatusRow label="Watchdog error" value={diag.watchdog.lastError} state="bad" />
+                    )}
+                  </>
+                )}
                 <StatusRow label="Queued (offline) pings" value={String(diag.queueLength)} state={diag.queueLength > 0 ? "warn" : "neutral"} />
                 <StatusRow label="App version" value={`${version} (${buildCode})`} state="neutral" />
                 <StatusRow label="Device" value={device} state="neutral" />
@@ -359,7 +396,11 @@ export function TrackingDiagnostics({ visible, onClose }: { visible: boolean; on
                     Screen band karne ke baad notification bar mein “K&S Solar — Location Active” dikhti
                     rehni chahiye. Agar woh gayab ho jaye → app kill ho rahi hai (Autostart ON karein).
                     Agar woh dikhti rahe magar “Last GPS fix” purana hota jaye → battery optimization
-                    (Doze) band karein.
+                    (Doze) band karein.{"\n\n"}
+                    Auto-revive: agar notification ya app swipe se band ho jaye to watchdog ~2 minute
+                    mein tracking khud wapas chalu kar deta hai (gehri neend/Doze mein 9 minute tak lag
+                    sakte hain). Lekin settings se “Force stop” karne ke baad app khud start NAHIN ho
+                    sakti — app dobara kholni paregi.
                   </Text>
                 </View>
               </View>

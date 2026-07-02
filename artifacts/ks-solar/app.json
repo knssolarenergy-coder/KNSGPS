@@ -2,7 +2,7 @@
   "expo": {
     "name": "K&S Solar Energy",
     "slug": "ks-solar",
-    "version": "1.0.14",
+    "version": "1.0.15",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "ks-solar",
@@ -26,7 +26,7 @@
     },
     "android": {
       "package": "com.kssolar.app",
-      "versionCode": 15,
+      "versionCode": 16,
       "googleServicesFile": "./google-services.json",
       "foregroundServiceTypes": ["location"],
       "adaptiveIcon": {
@@ -46,7 +46,9 @@
         "VIBRATE",
         "REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
         "WAKE_LOCK",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "SCHEDULE_EXACT_ALARM",
+        "USE_EXACT_ALARM"
       ]
     },
     "web": {

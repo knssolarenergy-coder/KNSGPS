@@ -75,6 +75,7 @@ _Populate as you build — explicit user instructions worth remembering across s
 
 - Always run codegen after changing `openapi.yaml`: `pnpm --filter @workspace/api-spec run codegen`
 - After running codegen, restart the Expo workflow — Orval cleans the output folder before regenerating, which causes a transient Metro hot-reload crash if the bundler is running during the clean step.
+- Auto-revive watchdog (`modules/tracking-watchdog`): native 2-min exact-alarm chain + 15-min WorkManager backstop that revives tracking after HiOS kills the app (notification/recents swipe). Armed on tracking start, disarmed on logout. Force stop is unrecoverable by Android design. See `.agents/memory/native-tracking-revival.md` for the mechanism.
 - react-native-webview version may show compatibility warning — it works fine in Expo Go.
 - WebView on web (browser preview) shows a placeholder message since WebView isn't supported in browser.
 - Never use `Link asChild` with style arrays — crashes on web. Use `router.push()` instead.
