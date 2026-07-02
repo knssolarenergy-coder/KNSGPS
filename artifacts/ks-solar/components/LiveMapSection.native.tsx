@@ -249,10 +249,17 @@ export function LiveMapSection() {
 
   // Mapbox access token — fetched at runtime (never hardcoded). The map HTML is
   // built only once the token arrives, then the WebView mounts.
-  const { data: mapsTokenData } = useGetMapsToken({
+  const {
+    data: mapsTokenData,
+    isError: tokenError,
+    isFetched: tokenFetched,
+    refetch: refetchToken,
+  } = useGetMapsToken({
     query: { queryKey: ["maps-token"], staleTime: Infinity },
   });
   const mapboxToken = mapsTokenData?.token;
+  // Fetched but empty ⇒ server has no MAPBOX_TOKEN configured; errored ⇒ network/auth.
+  const mapUnavailable = tokenError || (tokenFetched && !mapboxToken);
   const mapHtml = useMemo(
     () => (mapboxToken ? buildMapHtml(mapboxToken) : null),
     [mapboxToken],
@@ -374,9 +381,26 @@ export function LiveMapSection() {
       ) : null}
 
       {/* ── Loading overlay (map token / locations still loading) ── */}
-      {(isLoading || !mapHtml) && (
+      {(isLoading || !mapHtml) && !mapUnavailable && (
         <View style={s.loadingOverlay} pointerEvents="none">
           <ActivityIndicator size="large" color="#0891B2" />
+        </View>
+      )}
+
+      {/* ── Map unavailable (token fetch failed or server has no token) ── */}
+      {mapUnavailable && (
+        <View style={s.loadingOverlay}>
+          <View style={s.emptyCard}>
+            <Feather name="alert-triangle" size={28} color="#DC2626" />
+            <Text style={s.emptyTitle}>Map Unavailable</Text>
+            <Text style={s.emptySub}>
+              Could not load the map configuration from the server. Please check
+              your connection and try again.
+            </Text>
+            <TouchableOpacity style={s.retryBtn} onPress={() => refetchToken()} activeOpacity={0.85}>
+              <Text style={s.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -404,7 +428,7 @@ export function LiveMapSection() {
       </View>
 
       {/* ── Empty state ── */}
-      {!isLoading && locs.length === 0 && (
+      {!isLoading && locs.length === 0 && !mapUnavailable && (
         <View style={s.emptyOverlay} pointerEvents="none">
           <View style={s.emptyCard}>
             <Feather name="radio" size={28} color="#64748B" />
@@ -558,6 +582,8 @@ const s = StyleSheet.create({
   emptyCard: { backgroundColor: "rgba(255,255,255,0.92)", borderRadius: 20, padding: 28, alignItems: "center", gap: 8, maxWidth: 260 },
   emptyTitle: { fontSize: 16, fontFamily: "Inter_700Bold", color: "#0F172A", textAlign: "center" },
   emptySub: { fontSize: 13, fontFamily: "Inter_400Regular", color: "#64748B", textAlign: "center" },
+  retryBtn: { marginTop: 10, backgroundColor: "#0891B2", borderRadius: 12, paddingVertical: 10, paddingHorizontal: 28 },
+  retryBtnText: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#FFFFFF" },
   // Card strip
   cardStripWrapper: { position: "absolute", bottom: 0, left: 0, right: 0, paddingBottom: Platform.OS === "ios" ? 28 : 12 },
   cardStripContent: { paddingHorizontal: 12, gap: 10 },

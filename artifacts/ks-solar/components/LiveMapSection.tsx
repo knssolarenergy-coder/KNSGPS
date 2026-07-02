@@ -238,10 +238,17 @@ export function LiveMapSection() {
 
   // Mapbox access token — fetched at runtime (never hardcoded). The map HTML is
   // built only once the token arrives, then the iframe mounts.
-  const { data: mapsTokenData } = useGetMapsToken({
+  const {
+    data: mapsTokenData,
+    isError: tokenError,
+    isFetched: tokenFetched,
+    refetch: refetchToken,
+  } = useGetMapsToken({
     query: { queryKey: ["maps-token"], staleTime: Infinity },
   });
   const mapboxToken = mapsTokenData?.token;
+  // Fetched but empty ⇒ server has no MAPBOX_TOKEN configured; errored ⇒ network/auth.
+  const mapUnavailable = tokenError || (tokenFetched && !mapboxToken);
   const mapHtml = useMemo(
     () => (mapboxToken ? buildMapHtml(mapboxToken) : null),
     [mapboxToken],
@@ -349,6 +356,18 @@ export function LiveMapSection() {
             title="Live Technician Map"
             sandbox="allow-scripts allow-same-origin"
           />
+        ) : mapUnavailable ? (
+          <View style={[s.mapLoading, { backgroundColor: colors.muted }]}>
+            <Feather name="alert-triangle" size={28} color="#DC2626" />
+            <Text style={[s.emptyTitle, { color: colors.foreground, marginTop: 8 }]}>Map Unavailable</Text>
+            <Text style={[s.emptySub, { color: colors.mutedForeground, maxWidth: 280 }]}>
+              Could not load the map configuration from the server. Please check
+              your connection and try again.
+            </Text>
+            <TouchableOpacity style={s.retryBtn} onPress={() => refetchToken()} activeOpacity={0.85}>
+              <Text style={s.retryBtnText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         ) : (
           <View style={[s.mapLoading, { backgroundColor: colors.muted }]}>
             <ActivityIndicator size="large" color="#0891B2" />
@@ -538,6 +557,8 @@ const s = StyleSheet.create({
   emptyCard: { margin: 14, marginTop: 14, borderRadius: 16, borderWidth: 1, alignItems: "center", padding: 32, gap: 10 },
   emptyTitle: { fontSize: 17, fontFamily: "Inter_700Bold", textAlign: "center" },
   emptySub: { fontSize: 13, fontFamily: "Inter_400Regular", textAlign: "center", lineHeight: 20 },
+  retryBtn: { marginTop: 10, backgroundColor: "#0891B2", borderRadius: 12, paddingVertical: 10, paddingHorizontal: 28 },
+  retryBtnText: { fontSize: 14, fontFamily: "Inter_700Bold", color: "#FFFFFF" },
   listContent: { padding: 14, gap: 0 },
   sectionLabel: { fontSize: 12, fontFamily: "Inter_600SemiBold", paddingTop: 4, paddingBottom: 10, textTransform: "uppercase", letterSpacing: 0.5 },
   card: { marginBottom: 10, borderRadius: 14, borderWidth: 1.5, overflow: "hidden" },
