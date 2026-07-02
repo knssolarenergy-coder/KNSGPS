@@ -360,6 +360,33 @@ export function TrackingDiagnostics({ visible, onClose }: { visible: boolean; on
                     {diag.watchdog.lastError && (
                       <StatusRow label="Watchdog error" value={diag.watchdog.lastError} state="bad" />
                     )}
+                    <StatusRow
+                      label="Native fallback ready"
+                      value={diag.watchdog.configPresent ? "yes (token saved)" : "no (login/track once)"}
+                      state={diag.watchdog.configPresent ? "good" : "warn"}
+                    />
+                    <StatusRow
+                      label="Native fallback upload"
+                      value={
+                        diag.watchdog.lastNativePostTs
+                          ? `${diag.watchdog.lastNativePostOk ? "OK" : "failed"} · ${ageLabel(diag.watchdog.lastNativePostTs)}`
+                          : "never (JS alive — not needed)"
+                      }
+                      state={
+                        diag.watchdog.lastNativePostTs
+                          ? diag.watchdog.lastNativePostOk
+                            ? "good"
+                            : "bad"
+                          : "neutral"
+                      }
+                    />
+                    {diag.watchdog.lastNativePostError && (
+                      <StatusRow
+                        label="Native upload error"
+                        value={diag.watchdog.lastNativePostError}
+                        state="bad"
+                      />
+                    )}
                   </>
                 )}
                 <StatusRow label="Queued (offline) pings" value={String(diag.queueLength)} state={diag.queueLength > 0 ? "warn" : "neutral"} />
@@ -399,8 +426,11 @@ export function TrackingDiagnostics({ visible, onClose }: { visible: boolean; on
                     (Doze) band karein.{"\n\n"}
                     Auto-revive: agar notification ya app swipe se band ho jaye to watchdog ~2 minute
                     mein tracking khud wapas chalu kar deta hai (gehri neend/Doze mein 9 minute tak lag
-                    sakte hain). Lekin settings se “Force stop” karne ke baad app khud start NAHIN ho
-                    sakti — app dobara kholni paregi.
+                    sakte hain). Kill ke baad app recents mein wapas nazar NAHIN aayegi — ye normal
+                    hai; notification aur location bhejna kaafi hai. Agar app ka JS engine wapas na
+                    chale to bhi “Native fallback upload” har ~2 minute mein location seedha server
+                    bhejta rehta hai. Lekin settings se “Force stop” karne ke baad app khud start
+                    NAHIN ho sakti — app dobara kholni paregi.
                   </Text>
                 </View>
               </View>

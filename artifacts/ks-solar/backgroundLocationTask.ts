@@ -3,7 +3,13 @@ import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { getIsIgnoringBatteryOptimizations, requestIgnoreBatteryOptimizations } from "@/modules/battery-optimization";
-import { getWatchdogStatus, setWatchdogEnabled, type WatchdogStatus } from "@/modules/tracking-watchdog";
+import {
+  getWatchdogStatus,
+  notifyWatchdogJsAlive,
+  setWatchdogConfig,
+  setWatchdogEnabled,
+  type WatchdogStatus,
+} from "@/modules/tracking-watchdog";
 
 export const LOCATION_TASK_NAME = "ks-solar-bg-location";
 
@@ -183,6 +189,9 @@ if (Platform.OS !== "web") {
       // Heartbeat FIRST — proves the foreground service is alive and producing
       // fixes, independent of whether the network upload below succeeds.
       try { await AsyncStorage.setItem(LAST_LOC_TS_KEY, String(Date.now())); } catch {}
+      // Tell the native watchdog the JS upload pipeline is alive so its native
+      // upload fallback stands down (it only posts while this handler is dead).
+      notifyWatchdogJsAlive();
       try {
         const token = await SecureStore.getItemAsync(TOKEN_KEY);
         if (!token) {
@@ -335,6 +344,21 @@ export async function startAlwaysOnTracking(): Promise<boolean> {
     }
 
     await recordStart(true, needsRestart ? "service (re)started" : "service already running");
+
+    // Hand the watchdog upload credentials BEFORE arming it: revival restores
+    // the foreground service natively, but the JS upload handler proved NOT to
+    // boot headlessly on HiOS (notification returned, zero uploads reached the
+    // server). With this config the watchdog POSTs a fix natively (~2-min
+    // cadence) whenever the JS heartbeat goes stale. Refreshed on every
+    // foreground so the 30-day token stays fresh. No-op on old APKs.
+    try {
+      const token = await SecureStore.getItemAsync(TOKEN_KEY);
+      const domain = process.env.EXPO_PUBLIC_DOMAIN;
+      setWatchdogConfig(
+        token && domain ? token : null,
+        token && domain ? `https://${domain}/api/technician-locations` : null
+      );
+    } catch {}
 
     // Arm the native auto-revive watchdog: a ~2-min exact-alarm chain (+15-min
     // WorkManager backstop) that natively restores this foreground service —
@@ -540,7 +564,9 @@ export async function getTrackingDiagnostics(): Promise<TrackingDiagnostics> {
 export async function stopBackgroundLocation(): Promise<void> {
   if (Platform.OS === "web") return;
   // Disarm the auto-revive watchdog FIRST so it cannot resurrect the service
-  // we are about to stop.
+  // we are about to stop. Clearing the config drops the native fallback's
+  // auth token (disarm also clears it natively — belt and braces).
+  setWatchdogConfig(null, null);
   setWatchdogEnabled(false);
   try {
     const already = await Location.hasStartedLocationUpdatesAsync(LOCATION_TASK_NAME);

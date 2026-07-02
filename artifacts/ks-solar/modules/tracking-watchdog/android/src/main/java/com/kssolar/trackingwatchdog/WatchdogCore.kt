@@ -8,8 +8,18 @@ import android.content.SharedPreferences
 import android.os.Build
 import android.util.Log
 import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.OutOfQuotaPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.google.android.gms.location.LocationServices
+import com.google.android.gms.location.Priority
+import com.google.android.gms.tasks.CancellationTokenSource
+import com.google.android.gms.tasks.Tasks
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.TimeUnit
 
 /**
@@ -58,6 +68,30 @@ object WatchdogCore {
   private const val KEY_LAST_REVIVAL_TS = "lastRevivalTs"
   private const val KEY_LAST_ERROR = "lastError"
 
+  // Native upload fallback. Revival restores the foreground service, but the
+  // actual server upload lives in the JS task handler — and the headless JS
+  // boot (expo-task-manager HeadlessAppLoader) proved unreliable on HiOS:
+  // notification came back, ZERO uploads reached the server. So the JS side
+  // hands us an auth token + upload URL when arming, the JS task handler
+  // reports a heartbeat on every fix, and whenever that heartbeat goes stale
+  // (JS dead) each watchdog pass natively grabs a fix and POSTs it itself.
+  private const val KEY_AUTH_TOKEN = "authToken"
+  private const val KEY_UPLOAD_URL = "uploadUrl"
+  private const val KEY_JS_HEARTBEAT_TS = "jsHeartbeatTs"
+  private const val KEY_LAST_NATIVE_POST_TS = "lastNativePostTs"
+  private const val KEY_LAST_NATIVE_POST_OK = "lastNativePostOk"
+  private const val KEY_LAST_NATIVE_POST_ERROR = "lastNativePostError"
+
+  // JS posts every 60s while alive; >3 min of silence = 3 missed cycles = the
+  // JS engine is dead and the native fallback must take over.
+  private const val JS_STALE_MS = 3L * 60L * 1000L
+
+  // A last-known fix younger than this is fresh enough to upload as-is (the
+  // revived foreground service keeps GPS warm at a 60s cadence).
+  private const val LAST_FIX_FRESH_MS = 2L * 60L * 1000L
+
+  private const val PING_WORK_NAME = "ks-tracking-native-ping"
+
   // ~2-minute revival target. setExactAndAllowWhileIdle is one-shot, so every
   // pass schedules the next alarm (self-chaining).
   private const val INTERVAL_MS = 2L * 60L * 1000L
@@ -102,7 +136,43 @@ object WatchdogCore {
     } else {
       cancelAlarm(app)
       cancelWorker(app)
+      // Disarm = logout: drop the upload credentials so the native fallback
+      // can never post for a logged-out technician, even if JS forgets to
+      // clear the config explicitly.
+      prefs(app).edit()
+        .remove(KEY_AUTH_TOKEN)
+        .remove(KEY_UPLOAD_URL)
+        .remove(KEY_JS_HEARTBEAT_TS)
+        .commit()
     }
+  }
+
+  /**
+   * Store (or clear, when either value is null/blank) the credentials the
+   * native upload fallback needs. Called from JS on every successful tracking
+   * start, so the token stays fresh within its 30-day expiry window.
+   */
+  fun setConfigFromApp(context: Context, authToken: String?, uploadUrl: String?) {
+    processAlreadySeen = true
+    val e = prefs(context.applicationContext).edit()
+    if (authToken.isNullOrBlank() || uploadUrl.isNullOrBlank()) {
+      e.remove(KEY_AUTH_TOKEN).remove(KEY_UPLOAD_URL)
+    } else {
+      e.putString(KEY_AUTH_TOKEN, authToken).putString(KEY_UPLOAD_URL, uploadUrl)
+    }
+    e.apply()
+  }
+
+  /**
+   * Called by the JS background task handler on every location fix. A fresh
+   * heartbeat tells the watchdog the JS upload pipeline is alive, so the
+   * native fallback stands down.
+   */
+  fun notifyJsAlive(context: Context) {
+    processAlreadySeen = true
+    prefs(context.applicationContext).edit()
+      .putLong(KEY_JS_HEARTBEAT_TS, System.currentTimeMillis())
+      .apply()
   }
 
   fun getStatus(context: Context): Map<String, Any?> {
@@ -113,7 +183,13 @@ object WatchdogCore {
       "lastRunTs" to p.getLong(KEY_LAST_RUN_TS, 0L).toDouble(),
       "lastRunSource" to p.getString(KEY_LAST_RUN_SOURCE, null),
       "lastRevivalTs" to p.getLong(KEY_LAST_REVIVAL_TS, 0L).toDouble(),
-      "lastError" to p.getString(KEY_LAST_ERROR, null)
+      "lastError" to p.getString(KEY_LAST_ERROR, null),
+      "configPresent" to (!p.getString(KEY_AUTH_TOKEN, null).isNullOrBlank() &&
+        !p.getString(KEY_UPLOAD_URL, null).isNullOrBlank()),
+      "jsHeartbeatTs" to p.getLong(KEY_JS_HEARTBEAT_TS, 0L).toDouble(),
+      "lastNativePostTs" to p.getLong(KEY_LAST_NATIVE_POST_TS, 0L).toDouble(),
+      "lastNativePostOk" to p.getBoolean(KEY_LAST_NATIVE_POST_OK, false),
+      "lastNativePostError" to p.getString(KEY_LAST_NATIVE_POST_ERROR, null)
     )
   }
 
@@ -154,6 +230,134 @@ object WatchdogCore {
     // Always re-assert the chain so a revoked-then-restored exact-alarm grant
     // (or an OEM alarm wipe) heals itself on the next worker/boot pass.
     scheduleNextAlarm(app)
+    // If the JS upload pipeline is dead (stale heartbeat), upload a fix
+    // natively so the office keeps receiving locations while the app is
+    // killed. Runs AFTER the revival attempt so a freshly-revived service
+    // keeps GPS warm for lastLocation.
+    maybeNativePing(app, source)
+  }
+
+  /**
+   * Decide whether the native fallback should upload, and on which thread.
+   * Alarm/boot receivers run on the main thread with a ~10s budget — far too
+   * tight for GPS + network — so those passes enqueue a one-shot WorkManager
+   * job. The 15-min periodic worker already runs on a background thread and
+   * pings inline.
+   */
+  private fun maybeNativePing(context: Context, source: String) {
+    try {
+      if (!shouldNativePing(context)) return
+      if (source == "worker") {
+        nativePing(context)
+        return
+      }
+      val builder = OneTimeWorkRequestBuilder<NativePingWorker>()
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        // Expedited work runs promptly even in light Doze on S+ (no
+        // getForegroundInfo needed there). On older Androids plain one-shot
+        // work is used because expedited-as-FGS would need a notification.
+        builder.setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+      }
+      WorkManager.getInstance(context.applicationContext)
+        .enqueueUniqueWork(PING_WORK_NAME, ExistingWorkPolicy.KEEP, builder.build())
+    } catch (t: Throwable) {
+      Log.w(TAG, "Failed to schedule native ping", t)
+    }
+  }
+
+  private fun shouldNativePing(context: Context): Boolean {
+    val p = prefs(context.applicationContext)
+    if (!p.getBoolean(KEY_ENABLED, false)) return false
+    if (p.getString(KEY_AUTH_TOKEN, null).isNullOrBlank()) return false
+    if (p.getString(KEY_UPLOAD_URL, null).isNullOrBlank()) return false
+    val heartbeat = p.getLong(KEY_JS_HEARTBEAT_TS, 0L)
+    return System.currentTimeMillis() - heartbeat > JS_STALE_MS
+  }
+
+  /**
+   * One native upload: obtain a location (fresh lastLocation, else an active
+   * getCurrentLocation request) and POST it to the server with the stored
+   * bearer token. MUST be called from a background thread. Every outcome is
+   * recorded for the diagnostics panel — this path must never fail silently.
+   */
+  fun nativePing(context: Context) {
+    val app = context.applicationContext
+    if (!shouldNativePing(app)) return
+    val p = prefs(app)
+    val token = p.getString(KEY_AUTH_TOKEN, null) ?: return
+    val url = p.getString(KEY_UPLOAD_URL, null) ?: return
+    try {
+      val loc = obtainLocation(app)
+      if (loc == null) {
+        recordNativePost(app, false, "No GPS fix available (location off or permission revoked?)")
+        return
+      }
+      val body = JSONObject()
+        .put("latitude", loc.latitude.toString())
+        .put("longitude", loc.longitude.toString())
+        .put("address", JSONObject.NULL)
+        .toString()
+      val conn = URL(url).openConnection() as HttpURLConnection
+      try {
+        conn.requestMethod = "POST"
+        conn.connectTimeout = 10_000
+        conn.readTimeout = 10_000
+        conn.doOutput = true
+        conn.setRequestProperty("Content-Type", "application/json")
+        conn.setRequestProperty("Authorization", "Bearer $token")
+        conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+        val code = conn.responseCode
+        when {
+          code in 200..299 -> recordNativePost(app, true, null)
+          code == 401 || code == 403 ->
+            recordNativePost(app, false, "HTTP $code — session expired, app khol kar dobara login karein")
+          else -> recordNativePost(app, false, "HTTP $code")
+        }
+      } finally {
+        conn.disconnect()
+      }
+    } catch (t: Throwable) {
+      Log.w(TAG, "Native ping failed", t)
+      recordNativePost(app, false, (t.cause ?: t).toString().take(200))
+    }
+  }
+
+  private fun obtainLocation(context: Context): android.location.Location? {
+    return try {
+      val fused = LocationServices.getFusedLocationProviderClient(context)
+      val last: android.location.Location? = try {
+        Tasks.await(fused.lastLocation, 5, TimeUnit.SECONDS)
+      } catch (_: Throwable) {
+        null
+      }
+      if (last != null && System.currentTimeMillis() - last.time <= LAST_FIX_FRESH_MS) {
+        return last
+      }
+      val cts = CancellationTokenSource()
+      try {
+        Tasks.await(
+          fused.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token),
+          20,
+          TimeUnit.SECONDS
+        )
+      } catch (t: Throwable) {
+        cts.cancel()
+        // A stale last-known fix beats reporting nothing at all.
+        last
+      }
+    } catch (t: Throwable) {
+      // SecurityException (permission revoked) or missing Play services.
+      null
+    }
+  }
+
+  private fun recordNativePost(context: Context, ok: Boolean, error: String?) {
+    val e = prefs(context).edit()
+      .putLong(KEY_LAST_NATIVE_POST_TS, System.currentTimeMillis())
+      .putBoolean(KEY_LAST_NATIVE_POST_OK, ok)
+    if (error == null) e.remove(KEY_LAST_NATIVE_POST_ERROR) else e.putString(KEY_LAST_NATIVE_POST_ERROR, error)
+    // commit(): a WorkManager process can be torn down right after doWork().
+    e.commit()
   }
 
   private fun recordError(context: Context, message: String) {

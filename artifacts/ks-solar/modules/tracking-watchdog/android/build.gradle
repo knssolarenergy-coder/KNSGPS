@@ -18,4 +18,8 @@ dependencies {
   // WorkManager powers the 15-minute backstop pass that keeps the watchdog
   // alive when exact alarms are revoked or cleared.
   implementation 'androidx.work:work-runtime-ktx:2.9.1'
+  // Native upload fallback needs a location fix without any JS running.
+  // EXACTLY the version expo-location 19.0.8 declares (`api` scope) — keep in
+  // lockstep to avoid Gradle resolution conflicts.
+  implementation 'com.google.android.gms:play-services-location:21.0.1'
 }

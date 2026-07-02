@@ -10,10 +10,20 @@ export type WatchdogStatus = {
   /** Epoch ms of the last pass that ran in a fresh process (i.e. the app had been killed and was revived), 0 = never. */
   lastRevivalTs: number;
   lastError: string | null;
+  /** Whether the native upload fallback holds an auth token + upload URL. */
+  configPresent: boolean;
+  /** Epoch ms of the last heartbeat from the JS background task, 0 = never. Stale (>3 min) = JS engine dead, native fallback takes over. */
+  jsHeartbeatTs: number;
+  /** Epoch ms of the last NATIVE fallback upload attempt, 0 = never. */
+  lastNativePostTs: number;
+  lastNativePostOk: boolean;
+  lastNativePostError: string | null;
 };
 
 const NativeTrackingWatchdog = requireOptionalNativeModule<{
   setEnabled: (enabled: boolean) => void;
+  setConfig: (authToken: string | null, uploadUrl: string | null) => void;
+  notifyJsAlive: () => void;
   getStatus: () => WatchdogStatus;
 }>("TrackingWatchdog");
 
@@ -37,6 +47,41 @@ export function setWatchdogEnabled(enabled: boolean): void {
     NativeTrackingWatchdog.setEnabled(enabled);
   } catch {
     // Best-effort — never let watchdog arming break the tracking start path.
+  }
+}
+
+/**
+ * Hand the native upload fallback what it needs to POST locations BY ITSELF
+ * while the JS engine is dead: revival restores the foreground service
+ * natively, but the actual upload lives in the JS task handler — which proved
+ * NOT to boot headlessly on HiOS (notification returned, zero uploads reached
+ * the server). With this config the watchdog pass uploads a fix natively
+ * (~2 min cadence) whenever the JS heartbeat goes stale. Pass nulls to clear
+ * (logout). Refreshed on every successful tracking start so the token stays
+ * fresh.
+ */
+export function setWatchdogConfig(authToken: string | null, uploadUrl: string | null): void {
+  if (Platform.OS !== "android") return;
+  if (!NativeTrackingWatchdog) return;
+  try {
+    NativeTrackingWatchdog.setConfig(authToken, uploadUrl);
+  } catch {
+    // Best-effort — never let watchdog config break the tracking start path.
+  }
+}
+
+/**
+ * Heartbeat from the JS background task handler (called on every fix). A
+ * fresh heartbeat tells the native fallback the JS upload pipeline is alive,
+ * so it stands down instead of double-posting.
+ */
+export function notifyWatchdogJsAlive(): void {
+  if (Platform.OS !== "android") return;
+  if (!NativeTrackingWatchdog) return;
+  try {
+    NativeTrackingWatchdog.notifyJsAlive();
+  } catch {
+    // Best-effort.
   }
 }
 

@@ -21,6 +21,17 @@ class TrackingWatchdogModule : Module() {
       WatchdogCore.setEnabledFromApp(context, enabled)
     }
 
+    // Credentials for the native upload fallback (null/blank clears them).
+    Function("setConfig") { authToken: String?, uploadUrl: String? ->
+      WatchdogCore.setConfigFromApp(context, authToken, uploadUrl)
+    }
+
+    // Heartbeat from the JS background task — fresh heartbeat means the JS
+    // upload pipeline is alive, so the native fallback stands down.
+    Function("notifyJsAlive") {
+      WatchdogCore.notifyJsAlive(context)
+    }
+
     Function("getStatus") {
       WatchdogCore.getStatus(context)
     }
